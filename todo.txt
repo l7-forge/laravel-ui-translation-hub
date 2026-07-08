@@ -1,0 +1,53 @@
+<div class="flex justify-between items-center mb-8 p-3 bg-gray-50 dark:bg-gray-800 rounded-sm border-2 dark:border-gray-700">
+    
+    {{-- Linke Seite: Aktionen & Info --}}
+    <div class="flex items-center gap-4">
+        {{-- Source Language Badge --}}
+        <div class="text-[10px] font-bold px-2 py-2 rounded-sm uppercase bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600">
+            Source: <span class="text-indigo-600 dark:text-indigo-400">{{ strtoupper($baseLocaleIso) }}</span>
+        </div>
+
+        {{-- Translate All Button --}}
+        <button type="button"
+            wire:click="translateAll"
+            wire:loading.attr="disabled"
+            @if(empty($availableLocales)) disabled @endif
+            class="text-[10px] font-bold px-2 py-3 rounded-sm uppercase bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            <span wire:loading.remove wire:target="translateAll">Translate All Missing</span>
+            <span wire:loading wire:target="translateAll">Translating...</span>
+        </button>
+
+        {{-- Filter Options --}}
+        <select wire:model.live="filter"
+            class="cursor-pointer text-[10px] font-bold px-2 py-2 rounded-sm uppercase border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200">
+            <option value="all">Show All</option>
+            <option value="missing">Missing Only</option>
+        </select>
+    </div>
+
+    {{-- Rechte Seite: Target Language Auswahl --}}
+    <div class="flex items-center gap-2">
+        <span class="text-[10px] font-bold uppercase text-gray-400">Target:</span>
+        
+        <select wire:model.live="targetLocaleIso"
+            @if(empty($availableLocales)) disabled @endif
+            class="text-[10px] font-bold px-2 py-2 pr-7 rounded-sm 
+            uppercase cursor-pointer
+            border-indigo-100 dark:border-gray-600  
+            bg-indigo-50 dark:bg-indigo-900/30
+            hover:bg-indigo-500 dark:hover:bg-indigo-600
+            text-indigo-700 dark:text-gray-200
+            disabled:opacity-60 disabled:cursor-not-allowed">
+            
+            @if(empty($availableLocales))
+                <option value="">No targets found (Check DB)</option>
+            @else
+                @foreach ($availableLocales as $loc)
+                    <option class="dark:text-gray-800 cursor-pointer" value="{{ $loc }}">
+                        {{ $loc }}
+                    </option>
+                @endforeach
+            @endif
+        </select>
+    </div>
+</div>
