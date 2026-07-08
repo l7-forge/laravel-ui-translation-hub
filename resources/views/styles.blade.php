@@ -1,7 +1,7 @@
 {{--
 ======================================================================
 GENERATED TAILWIND CLASSES FOR LARAVEL UI TRANSLATION HUB
-Diese Datei dient nur als Futter für den lokalen Tailwind-Compiler.
+Diese Datei dient nur als Futter für den lokalen Tailwind-Compiler. V1
 ======================================================================
 --}}
 
