@@ -48,7 +48,7 @@ foreach ($iterator as $file) {
                     $class = trim($class);
                     
                     if ($class !== '') {
-                        // FILTER: Überspringe alles, was keine echte CSS-Klasse ist
+                        // FILTER 1: Überspringe Code-Fragmente und Operatoren
                         if (
                             str_contains($class, '?') || 
                             str_contains($class, '$') || 
@@ -56,6 +56,14 @@ foreach ($iterator as $file) {
                             str_contains($class, '}') || 
                             $class === ':'
                         ) {
+                            continue;
+                        }
+
+                        // FILTER 2: Verhindere unvollständige eckige Klammern
+                        if (str_contains($class, '[') && !str_contains($class, ']')) {
+                            continue;
+                        }
+                        if (str_contains($class, ']') && !str_contains($class, '[')) {
                             continue;
                         }
 

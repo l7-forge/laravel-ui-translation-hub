@@ -6,7 +6,6 @@ Diese Datei dient nur als Futter für den lokalen Tailwind-Compiler.
 --}}
 
 <div class="hidden" style="display: none !important;">
-    <span class="after:content-["></span>
     <span class="align-top"></span>
     <span class="animate-fade-in"></span>
     <span class="appearance-none"></span>
