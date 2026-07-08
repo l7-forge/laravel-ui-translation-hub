@@ -84,12 +84,11 @@ $outputContent .= "GENERATED TAILWIND CLASSES FOR LARAVEL UI TRANSLATION HUB\n";
 $outputContent .= "Diese Datei dient nur als Futter für den lokalen Tailwind-Compiler.\n";
 $outputContent .= "======================================================================\n";
 $outputContent .= "--}}\n\n";
-$outputContent .= "<div class=\"hidden\">\n";
+$outputContent .= "<div class=\"hidden\" style=\"display: none !important;\">\n";
 
-// Wir klatschen die Klassen in Blöcken rein, damit es lesbar bleibt
-$chunks = array_chunk($uniqueClasses, 10);
-foreach ($chunks as $chunk) {
-    $outputContent .= "    <span class=\"" . implode(' ', $chunk) . "\"></span>\n";
+// Jede Klasse bekommt ihr eigenes isoliertes Element, um CSS-Konflikte zu vermeiden
+foreach ($uniqueClasses as $class) {
+    $outputContent .= "    <span class=\"{$class}\"></span>\n";
 }
 
 $outputContent .= "</div>\n";
@@ -97,4 +96,4 @@ $outputContent .= "</div>\n";
 // Datei schreiben
 file_put_contents($outputFile, $outputContent);
 
-echo "Erfolgreich! " . count($uniqueClasses) . " einzigartige Klassen in {$outputFile} exportiert.\n";
+echo "Erfolgreich! " . count($uniqueClasses) . " einzigartige Klassen isoliert in {$outputFile} exportiert.\n";
