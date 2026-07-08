@@ -516,9 +516,9 @@ new class extends Component {
 
     {{-- NEU: API Key Modal --}}
     @if ($showApiKeyModal)
-        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs">
+        <div class="dark fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs">
             <div
-                class="bg-white dark:bg-[#161426] border border-gray-200 dark:border-gray-800 rounded-sm w-full max-w-md p-6 shadow-xl animate-fade-in">
+                class="dark bg-white dark:bg-[#161426] border border-gray-200 dark:border-gray-800 rounded-sm w-full max-w-md p-6 shadow-xl animate-fade-in">
                 <div class="text-sm font-black uppercase tracking-wider text-gray-800 dark:text-white mb-2">
                     L7 Translation Hub Cloud-Setup
                 </div>
