@@ -54,9 +54,14 @@ class LaravelUiTranslationHubServiceProvider extends ServiceProvider
 
             // 2. NEU: Switcher-Komponente zum Kopieren bereitstellen
             $this->publishes([
+                // 1. Die generierte Styles-Datei für Tailwind
+                __DIR__.'/../resources/views/styles.blade.php' 
+                    => resource_path('views/vendor/laravel-ui-translation-hub/styles.blade.php'),
+            
+                // 2. Der Language Switcher für das UI
                 dirname(__DIR__, 2) . '/resources/views/livewire/laravel-ui-language-switcher.blade.php'
-                => resource_path('views/livewire/laravel-ui-language-switcher.blade.php'),
-            ], 'ui-translation-hub-switcher');
+                    => resource_path('views/livewire/laravel-ui-language-switcher.blade.php'),
+            ], 'laravel-ui-translation-hub-assets');
         }
     }
 
