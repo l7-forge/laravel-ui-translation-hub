@@ -1,11 +1,14 @@
 {{--
 ======================================================================
 GENERATED TAILWIND CLASSES FOR LARAVEL UI TRANSLATION HUB
-Diese Datei dient nur als Futter für den lokalen Tailwind-Compiler. V1
+Diese Datei dient nur als Futter für den lokalen Tailwind-Compiler.
 ======================================================================
 --}}
 
 <div class="hidden" style="display: none !important;">
+    <span class="@else"></span>
+    <span class="@endif"></span>
+    <span class="@if"></span>
     <span class="align-top"></span>
     <span class="animate-fade-in"></span>
     <span class="appearance-none"></span>
@@ -14,9 +17,12 @@ Diese Datei dient nur als Futter für den lokalen Tailwind-Compiler. V1
     <span class="bg-[#ffffff]"></span>
     <span class="bg-black/60"></span>
     <span class="bg-emerald-600"></span>
+    <span class="bg-gray-100"></span>
     <span class="bg-gray-300"></span>
     <span class="bg-gray-400"></span>
     <span class="bg-gray-50"></span>
+    <span class="bg-gray-800"></span>
+    <span class="bg-indigo-50/40"></span>
     <span class="bg-indigo-600"></span>
     <span class="bg-white"></span>
     <span class="border"></span>
@@ -26,6 +32,7 @@ Diese Datei dient nur als Futter für den lokalen Tailwind-Compiler. V1
     <span class="border-gray-100"></span>
     <span class="border-gray-200"></span>
     <span class="border-gray-300"></span>
+    <span class="border-indigo-200"></span>
     <span class="border-t"></span>
     <span class="break-words"></span>
     <span class="cursor-pointer"></span>
@@ -34,12 +41,14 @@ Diese Datei dient nur als Futter für den lokalen Tailwind-Compiler. V1
     <span class="dark:bg-[#161426]"></span>
     <span class="dark:bg-[#1c1a2e]"></span>
     <span class="dark:bg-gray-700"></span>
-    <span class="dark:bg-gray-800"></span>
     <span class="dark:bg-gray-900"></span>
+    <span class="dark:bg-gray-900/50"></span>
+    <span class="dark:bg-indigo-950/10"></span>
     <span class="dark:border-[#374151]"></span>
     <span class="dark:border-gray-600"></span>
     <span class="dark:border-gray-700"></span>
     <span class="dark:border-gray-800"></span>
+    <span class="dark:border-indigo-900/50"></span>
     <span class="dark:divide-gray-800"></span>
     <span class="dark:hover:bg-gray-900/20"></span>
     <span class="dark:hover:bg-red-950/30"></span>
@@ -108,6 +117,7 @@ Diese Datei dient nur als Futter für den lokalen Tailwind-Compiler. V1
     <span class="mt-1"></span>
     <span class="mt-3"></span>
     <span class="mx-0"></span>
+    <span class="opacity-75"></span>
     <span class="overflow-x-auto"></span>
     <span class="p-1"></span>
     <span class="p-1.5"></span>
