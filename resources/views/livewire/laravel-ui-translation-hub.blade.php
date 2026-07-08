@@ -387,7 +387,7 @@ new class extends Component {
                     wire:click="{{ $autoTranslateEnabled ? 'disableApi' : '$set(\'showApiKeyModal\', true)' }}"
                     @checked($autoTranslateEnabled) class="sr-only peer">
                 <div
-                    class="w-8 h-4 bg-gray-300 dark:bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-indigo-600">
+                    class="w-8 h-4 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-indigo-600">
                 </div>
                 <span class="ml-2 text-[10px] font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
                     {{ $autoTranslateEnabled ? 'Autotranslate Active' : 'Enable Autotranslate' }}
@@ -518,7 +518,7 @@ new class extends Component {
     @if ($showApiKeyModal)
         <div class="dark fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs">
             <div
-                class="dark bg-white dark:bg-[#161426] border border-gray-200 dark:border-gray-800 rounded-sm w-full max-w-md p-6 shadow-xl animate-fade-in">
+                class="bg-[#161426] border border-gray-200 dark:border-gray-800 rounded-sm w-full max-w-md p-6 shadow-xl animate-fade-in">
                 <div class="text-sm font-black uppercase tracking-wider text-gray-800 dark:text-white mb-2">
                     L7 Translation Hub Cloud-Setup
                 </div>
