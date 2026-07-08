@@ -15,6 +15,13 @@
         "livewire/livewire": "^3.0|^4.0",
         "livewire/volt": "^1.0|^2.0"
     },
+    "scripts": {
+        "post-update-cmd": [
+            "@php artisan vendor:publish --tag=laravel-ui-translation-styles --force || true",
+            "@php artisan vendor:publish --tag=ui-translation-hub-config --skip-if-exists || true",
+            "@php artisan vendor:publish --tag=ui-language-switcher --skip-if-exists || true"
+        ]
+    },
     "autoload": {
         "psr-4": {
             "l7Studios\\LaravelUiTranslationHub\\": "src/"

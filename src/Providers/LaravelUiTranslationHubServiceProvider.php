@@ -46,22 +46,24 @@ class LaravelUiTranslationHubServiceProvider extends ServiceProvider
             // 5. Zurückschreiben an Volt
             \Livewire\Volt\Volt::mount($mergedPaths);
         });
-        // 3. Optional: Erlaube dem User, die Config zu publishen
+        // 1. Config
         if ($this->app->runningInConsole()) {
-            $this->publishes([
-                dirname(__DIR__, 2) . '/config/ui-translation-hub.php' => config_path('ui-translation-hub.php'),
-            ], 'ui-translation-hub-config');
+                $this->publishes([
+                    dirname(__DIR__, 2) . '/config/ui-translation-hub.php' 
+                        => config_path('ui-translation-hub.php'),
+                ], 'ui-translation-hub-config');
+                
+                //2. styles dummy (--force)
+                $this->publishes([
+                    dirname(__DIR__, 2) . '/resources/views/styles.blade.php'
+                        => resource_path('views/vendor/laravel-ui-translation-hub/styles.blade.php'),
+                    ], 'laravel-ui-translation-styles');
 
-            // 2. NEU: Switcher-Komponente zum Kopieren bereitstellen
-            $this->publishes([
-                // 1. Die generierte Styles-Datei für Tailwind
-                dirname(__DIR__, 2) . '/resources/views/styles.blade.php'
-                    => resource_path('views/vendor/laravel-ui-translation-hub/styles.blade.php'),
-            
-                // 2. Der Language Switcher für das UI
-                dirname(__DIR__, 2) . '/resources/views/livewire/laravel-ui-language-switcher.blade.php'
-                    => resource_path('views/livewire/laravel-ui-language-switcher.blade.php'),
-            ], 'laravel-ui-translation-hub-assets');
+                    // 3. Language Switcher UI
+                    $this->publishes([
+                    dirname(__DIR__, 2) . '/resources/views/livewire/laravel-ui-language-switcher.blade.php'
+                        => resource_path('views/livewire/laravel-ui-language-switcher.blade.php'),
+                ], 'ui-language-switcher');
         }
     }
 
