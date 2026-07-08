@@ -29,36 +29,36 @@ foreach ($iterator as $file) {
         echo "Scanne View: {$file->getFilename()}...\n";
         $content = file_get_contents($filePath);
 
+        // Vorab-Säuberung: Zeilenumbrüche und Tabs innerhalb der Datei durch Leerzeichen ersetzen,
+        // damit mehrzeilige class-Attribute fehlerfrei von der Regex erfasst werden.
+        $contentNormalized = str_replace(["\r", "\n", "\t"], ' ', $content);
+
         // Regex fängt class="klassen hier" und class='klassen hier' ein
-        // Berücksichtigt auch Zeilenumbrüche innerhalb von class-Attributen
-        preg_match_all('/class=["\']([^"\']+)["\']/is', $content, $matches);
+        preg_match_all('/class=["\']([^"\']+)["\']/i', $contentNormalized, $matches);
 
         if (!empty($matches[1])) {
             foreach ($matches[1] as $classString) {
-                // Eventuelle Blade-Echos wie {{ ... }} oder Linebreaks säubern
+                // Blade-Echos komplett entfernen, um keine Fragmente zu erhalten
                 $cleanedString = preg_replace('/\{\{[^\|\}]+\}\}/', ' ', $classString);
-                $cleanedString = str_replace(["\r", "\n", "\t"], ' ', $cleanedString);
                 
                 // In einzelne Klassen zerlegen
                 $classes = explode(' ', $cleanedString);
                 
                 foreach ($classes as $class) {
                     $class = trim($class);
-                    echo "Class: {$class}...\n";
-                    // Nur echte Klassen sammeln (keine leeren Strings oder Reste von Ternaries)
-                    if ($class !== ''){
-                        // 1. Wenn es ein Fragezeichen enthält, ist es PHP/Ternary -> überspringen
-                            if (str_contains($class, '?')) {
-                                continue;
-                            }
-                            // 2. Ein Doppelpunkt ist nur verboten, wenn er isoliert als PHP-Operator steht.
-                            // Wenn er direkt an Buchstaben klebt (wie bei dark: oder hover:), lassen wir ihn durch!
-                            if (str_contains($class, ':')) {
-                                // Falls es sich um einen reinen PHP-Ternary-Doppelpunkt handelt (isoliert)
-                                if ($class === ':') {
-                                    continue;
-                                }
-                    }
+                    
+                    if ($class !== '') {
+                        // FILTER: Überspringe alles, was keine echte CSS-Klasse ist
+                        if (
+                            str_contains($class, '?') || 
+                            str_contains($class, '$') || 
+                            str_contains($class, '{') || 
+                            str_contains($class, '}') || 
+                            $class === ':'
+                        ) {
+                            continue;
+                        }
+
                         echo "Class: {$class}...\n";
                         $allClasses[] = $class;
                     }
@@ -86,7 +86,7 @@ $outputContent .= "=============================================================
 $outputContent .= "--}}\n\n";
 $outputContent .= "<div class=\"hidden\" style=\"display: none !important;\">\n";
 
-// Jede Klasse bekommt ihr eigenes isoliertes Element, um CSS-Konflikte zu vermeiden
+// Jede Klasse isoliert in ein eigenes span-Tag packen, um CSS-Konflikte zu vermeiden
 foreach ($uniqueClasses as $class) {
     $outputContent .= "    <span class=\"{$class}\"></span>\n";
 }
@@ -96,4 +96,4 @@ $outputContent .= "</div>\n";
 // Datei schreiben
 file_put_contents($outputFile, $outputContent);
 
-echo "Erfolgreich! " . count($uniqueClasses) . " einzigartige Klassen isoliert in {$outputFile} exportiert.\n";
+echo "Erfolgreich! " . count($uniqueClasses) . " einzigartige Klassen in {$outputFile} exportiert.\n";

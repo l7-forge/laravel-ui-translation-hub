@@ -303,7 +303,7 @@ new class extends Component {
    --color-day-border-soft: #e2e8f0; /* Subtile Linien */
    --color-day-border-hard: #cbd5e1; /* Definierte Kanten */ --}}
 
-<div class="p-4 border rounded-sm border-[#cbd5e1] dark:border-[#374151] bg-[#ffffff] dark:bg-[#161426]">
+<div class="dark p-4 border rounded-sm border-[#cbd5e1] dark:border-[#374151] bg-[#ffffff] dark:bg-[#161426]">
     {{-- Tilte-bar --}}
     <div class="flex justify-between items-center mb-1 p-3 ">
         <div class="mx-0 font-black italic text-2xl tracking-tighter text-gray-800 dark:text-white uppercase mb-2">

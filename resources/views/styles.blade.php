@@ -6,7 +6,6 @@ Diese Datei dient nur als Futter für den lokalen Tailwind-Compiler.
 --}}
 
 <div class="hidden" style="display: none !important;">
-    <span class="$autoTranslateEnabled"></span>
     <span class="after:content-["></span>
     <span class="align-top"></span>
     <span class="animate-fade-in"></span>
@@ -31,6 +30,7 @@ Diese Datei dient nur als Futter für den lokalen Tailwind-Compiler.
     <span class="border-t"></span>
     <span class="break-words"></span>
     <span class="cursor-pointer"></span>
+    <span class="dark"></span>
     <span class="dark:bg-[#080e20]"></span>
     <span class="dark:bg-[#161426]"></span>
     <span class="dark:bg-[#1c1a2e]"></span>
@@ -174,5 +174,4 @@ Diese Datei dient nur als Futter für den lokalen Tailwind-Compiler.
     <span class="w-[45px]"></span>
     <span class="w-full"></span>
     <span class="z-50"></span>
-    <span class="{{"></span>
 </div>
