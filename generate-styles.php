@@ -46,7 +46,20 @@ foreach ($iterator as $file) {
                     $class = trim($class);
                     echo "Class: {$class}...\n";
                     // Nur echte Klassen sammeln (keine leeren Strings oder Reste von Ternaries)
-                    if ($class !== '' && !str_contains($class, '?') && !str_contains($class, ':')) {
+                    if ($class !== ''){
+                        // 1. Wenn es ein Fragezeichen enthält, ist es PHP/Ternary -> überspringen
+                            if (str_contains($class, '?')) {
+                                continue;
+                            }
+                            // 2. Ein Doppelpunkt ist nur verboten, wenn er isoliert als PHP-Operator steht.
+                            // Wenn er direkt an Buchstaben klebt (wie bei dark: oder hover:), lassen wir ihn durch!
+                            if (str_contains($class, ':')) {
+                                // Falls es sich um einen reinen PHP-Ternary-Doppelpunkt handelt (isoliert)
+                                if ($class === ':') {
+                                    continue;
+                                }
+                    }
+                        echo "Class: {$class}...\n";
                         $allClasses[] = $class;
                     }
                 }
