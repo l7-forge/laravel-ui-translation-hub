@@ -81,7 +81,7 @@ class LaravelUiTranslationHubServiceProvider extends ServiceProvider
             $this->publishes([
                 dirname(__DIR__, 2) . '/resources/views/styles.blade.php'
                 => resource_path('views/vendor/laravel-ui-translation-hub/styles.blade.php'),
-            ], 'laravel-ui-translation-styles');
+            ], 'ui-translation-styles');
 
             // 3. Language Switcher UI
             $this->publishes([
