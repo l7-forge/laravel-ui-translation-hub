@@ -90,6 +90,7 @@ $outputContent .= "{{--\n";
 $outputContent .= "======================================================================\n";
 $outputContent .= "GENERATED TAILWIND CLASSES FOR LARAVEL UI TRANSLATION HUB\n";
 $outputContent .= "Diese Datei dient nur als Futter für den lokalen Tailwind-Compiler.\n";
+$outputContent .= "Time: ". date('Y-m-d H:i:s') ."\n";
 $outputContent .= "======================================================================\n";
 $outputContent .= "--}}\n\n";
 $outputContent .= "<div class=\"hidden\" style=\"display: none !important;\">\n";
