@@ -2,7 +2,7 @@
 ======================================================================
 GENERATED TAILWIND CLASSES FOR LARAVEL UI TRANSLATION HUB
 Diese Datei dient nur als Futter für den lokalen Tailwind-Compiler.
-Time: 2026-07-09 13:16:29
+Time: 2026-07-10 10:55:38
 ======================================================================
 --}}
 
@@ -10,6 +10,17 @@ Time: 2026-07-09 13:16:29
     <span class="@else"></span>
     <span class="@endif"></span>
     <span class="@if"></span>
+    <span class="after:absolute"></span>
+    <span class="after:bg-white"></span>
+    <span class="after:border"></span>
+    <span class="after:border-gray-300"></span>
+    <span class="after:content-['']"></span>
+    <span class="after:h-3"></span>
+    <span class="after:left-[2px]"></span>
+    <span class="after:rounded-full"></span>
+    <span class="after:top-[2px]"></span>
+    <span class="after:transition-all"></span>
+    <span class="after:w-3"></span>
     <span class="align-top"></span>
     <span class="animate-fade-in"></span>
     <span class="appearance-none"></span>
@@ -80,6 +91,7 @@ Time: 2026-07-09 13:16:29
     <span class="focus:ring-indigo-500"></span>
     <span class="font-black"></span>
     <span class="font-bold"></span>
+    <span class="font-light"></span>
     <span class="font-medium"></span>
     <span class="gap-1"></span>
     <span class="gap-1.5"></span>
@@ -114,10 +126,12 @@ Time: 2026-07-09 13:16:29
     <span class="mb-4"></span>
     <span class="mb-8"></span>
     <span class="min-h-[42px]"></span>
+    <span class="ml-1"></span>
     <span class="ml-2"></span>
     <span class="mt-1"></span>
     <span class="mt-3"></span>
     <span class="mx-0"></span>
+    <span class="not-italic"></span>
     <span class="opacity-75"></span>
     <span class="overflow-x-auto"></span>
     <span class="p-1"></span>
@@ -129,6 +143,7 @@ Time: 2026-07-09 13:16:29
     <span class="peer"></span>
     <span class="peer-checked:after:border-white"></span>
     <span class="peer-checked:after:translate-x-full"></span>
+    <span class="peer-checked:bg-indigo-600"></span>
     <span class="peer-focus:outline-none"></span>
     <span class="pr-8"></span>
     <span class="pt-2"></span>
@@ -157,6 +172,7 @@ Time: 2026-07-09 13:16:29
     <span class="text-[12px]"></span>
     <span class="text-[9px]"></span>
     <span class="text-base"></span>
+    <span class="text-blue-300"></span>
     <span class="text-bold"></span>
     <span class="text-center"></span>
     <span class="text-gray-400"></span>

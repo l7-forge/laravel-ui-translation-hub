@@ -308,6 +308,7 @@ new class extends Component {
     <div class="flex justify-between items-center mb-1 p-3 ">
         <div class="mx-0 font-black italic text-2xl tracking-tighter text-gray-800 dark:text-white uppercase mb-2">
             Translation <span class="text-indigo-600 dark:text-indigo-400">Hub</span>
+            <span class="text-[12px] text-blue-300 not-italic font-light ml-1">API v1.0</span>
         </div>
         {{-- Source Language Badge --}}
         <div class="float-left  px-2 py-2 text-[10px]   text-gray-600 dark:text-gray-300 ">

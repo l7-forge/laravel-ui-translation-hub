@@ -33,11 +33,15 @@ foreach ($iterator as $file) {
         // damit mehrzeilige class-Attribute fehlerfrei von der Regex erfasst werden.
         $contentNormalized = str_replace(["\r", "\n", "\t"], ' ', $content);
 
-        // Regex fängt class="klassen hier" und class='klassen hier' ein
-        preg_match_all('/class=["\']([^"\']+)["\']/i', $contentNormalized, $matches);
+        // NEUE UNBRENNBARE REGEX: Trennt sauber nach äußeren doppelten ODER einfachen Quotes,
+        // damit innere Quotes in eckigen Klammern (z.B. after:content-['']) ignoriert werden.
+        preg_match_all('/class="([^"]+)"|class=\'([^\']+)\'/i', $contentNormalized, $matches);
 
-        if (!empty($matches[1])) {
-            foreach ($matches[1] as $classString) {
+        if (!empty($matches[0])) {
+            foreach ($matches[0] as $index => $fullMatch) {
+                // Da wir zwei Gruppen haben (1 für ", 2 für '), holen wir den befüllten String heraus
+                $classString = !empty($matches[1][$index]) ? $matches[1][$index] : $matches[2][$index];
+
                 // Blade-Echos komplett entfernen, um keine Fragmente zu erhalten
                 $cleanedString = preg_replace('/\{\{[^\|\}]+\}\}/', ' ', $classString);
                 
@@ -90,7 +94,7 @@ $outputContent .= "{{--\n";
 $outputContent .= "======================================================================\n";
 $outputContent .= "GENERATED TAILWIND CLASSES FOR LARAVEL UI TRANSLATION HUB\n";
 $outputContent .= "Diese Datei dient nur als Futter für den lokalen Tailwind-Compiler.\n";
-$outputContent .= "Time: ". date('Y-m-d H:i:s') ."\n";
+$outputContent .= "Time: " . date('Y-m-d H:i:s') . "\n"; // Bleibt bei date(), falls das Skript standalone via CLI läuft
 $outputContent .= "======================================================================\n";
 $outputContent .= "--}}\n\n";
 $outputContent .= "<div class=\"hidden\" style=\"display: none !important;\">\n";
