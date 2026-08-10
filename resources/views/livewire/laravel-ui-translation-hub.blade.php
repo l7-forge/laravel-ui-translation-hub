@@ -44,9 +44,9 @@ new class extends Component {
         //     "es" => "Español"
         // ]
         $this->availableLocales = DB::table($this->languagesTable)
-            ->where('code', '!=', $this->baseLocaleIso)
-            ->pluck('name', 'code') // <--- Zuerst die Value-Spalte, dann die Key-Spalte!
-            ->toArray();
+    ->where('code', '!=', $this->baseLocaleIso)
+    ->pluck('name', 'code') // <--- Zuerst die Value-Spalte, dann die Key-Spalte!
+    ->toArray();
 
         // Setze das initiale Target auf die erste verfügbare Sprache (falls vorhanden)
         $this->targetLocaleIso = !empty($this->availableLocales) ? array_key_first($this->availableLocales) : null;
@@ -303,12 +303,11 @@ new class extends Component {
    --color-day-border-soft: #e2e8f0; /* Subtile Linien */
    --color-day-border-hard: #cbd5e1; /* Definierte Kanten */ --}}
 
-<div class="dark p-4 border rounded-sm border-[#cbd5e1] dark:border-[#374151] bg-[#ffffff] dark:bg-[#161426]">
+<div class="p-4 border rounded-sm border-[#cbd5e1] dark:border-[#374151] bg-[#ffffff] dark:bg-[#161426]">
     {{-- Tilte-bar --}}
     <div class="flex justify-between items-center mb-1 p-3 ">
         <div class="mx-0 font-black italic text-2xl tracking-tighter text-gray-800 dark:text-white uppercase mb-2">
             Translation <span class="text-indigo-600 dark:text-indigo-400">Hub</span>
-            <span class="text-[12px] text-blue-300 not-italic font-light ml-1">API v1.0</span>
         </div>
         {{-- Source Language Badge --}}
         <div class="float-left  px-2 py-2 text-[10px]   text-gray-600 dark:text-gray-300 ">
@@ -327,14 +326,14 @@ new class extends Component {
 
 
             {{-- Translate All Button --}}
-            @if ($autoTranslateEnabled) 
-                    <button type="button" wire:click="translateAll" wire:loading.attr="disabled"
-                        @if (empty($availableLocales)) disabled @endif
-                        class="text-[10px] font-bold px-2 py-3 rounded-sm uppercase bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                        <span wire:loading.remove wire:target="translateAll">Translate All Missing</span>
-                        <span wire:loading wire:target="translateAll">Translating...</span>
-                    </button>
-            @endif
+            <button type="button"
+                wire:click="translateAll"
+                wire:loading.attr="disabled"
+                @if (empty($availableLocales)) disabled @endif
+                class="text-[10px] font-bold px-2 py-3 rounded-sm uppercase bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                <span wire:loading.remove wire:target="translateAll">Translate All Missing</span>
+                <span wire:loading wire:target="translateAll">Translating...</span>
+            </button>
 
             {{-- Filter Options --}}
             <select wire:model.live="filter"
@@ -355,11 +354,11 @@ new class extends Component {
                 @if (empty($availableLocales))
                     <option value="">{{ __t('no Languages') }}</option>
                 @else
-                    @foreach ($availableLocales as $code => $name)
-                        <option value="{{ $code }}">
-                            {{ strtoupper($code) }} - {{ $name }}
-                        </option>
-                    @endforeach
+                @foreach ($availableLocales as $code => $name)
+            <option value="{{ $code }}">
+                {{ strtoupper($code) }} - {{ $name }}
+            </option>
+        @endforeach
                 @endif
 
                 <optgroup label="──────────────────">
@@ -374,21 +373,19 @@ new class extends Component {
     {{-- actionbar2-start --}}
     <div
         class="flex justify-between items-center mb-8 p-3 rounded-sm border transition-colors duration-200
-        @if ($autoTranslateEnabled) 
-                    bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-200 dark:border-indigo-900/50
-        @else
-                    bg-gray-100 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800 opacity-75 
-        @endif
-         ">           
+        {{ $autoTranslateEnabled
+            ? 'bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-200 dark:border-indigo-900/50'
+            : 'bg-gray-100 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800 opacity-75' }}">
 
         {{-- Linke Seite: Checkbox / Toggle Status --}}
         <div class="flex items-center gap-3">
             <label class="relative inline-flex items-center cursor-pointer select-none">
                 <input type="checkbox"
                     wire:click="{{ $autoTranslateEnabled ? 'disableApi' : '$set(\'showApiKeyModal\', true)' }}"
-                    @checked($autoTranslateEnabled) class="sr-only peer">
+                    @checked($autoTranslateEnabled)
+                    class="sr-only peer">
                 <div
-                    class="w-8 h-4 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-indigo-600">
+                    class="w-8 h-4 bg-gray-300 dark:bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-indigo-600">
                 </div>
                 <span class="ml-2 text-[10px] font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
                     {{ $autoTranslateEnabled ? 'Autotranslate Active' : 'Enable Autotranslate' }}
@@ -404,7 +401,9 @@ new class extends Component {
                         class="text-indigo-600 dark:text-indigo-400 font-black">{{ $wordBalance }}</span>
                 </div>
 
-                <button type="button" wire:click="translateAll" wire:loading.attr="disabled"
+                <button type="button"
+                    wire:click="translateAll"
+                    wire:loading.attr="disabled"
                     @if (empty($availableLocales)) disabled @endif
                     class="text-[10px] font-bold px-3 py-1.5 rounded-sm uppercase bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-50">
                     <span wire:loading.remove wire:target="translateAll">Translate All Missing</span>
@@ -425,18 +424,25 @@ new class extends Component {
     @if ($showAddForm)
         <div class="p-3 border-t border-gray-300 dark:border-gray-700 mt-3 pt-3 flex flex-col gap-2 w-full">
             <div class="flex items-center gap-2">
-                <input type="text" wire:model="newLanguageName" placeholder="Sprache (z.B. Spanish)"
+                <input type="text"
+                    wire:model="newLanguageName"
+                    placeholder="Sprache (z.B. Spanish)"
                     class="text-[10px] font-bold px-2 py-2 rounded-sm border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 w-full uppercase shadow-sm" />
 
-                <input type="text" wire:model="newLanguageIso" placeholder="ISO (z.B. es)" maxlength="5"
+                <input type="text"
+                    wire:model="newLanguageIso"
+                    placeholder="ISO (z.B. es)"
+                    maxlength="5"
                     class="text-[10px] font-bold px-2 py-2 rounded-sm border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 w-24 uppercase shadow-sm" />
 
-                <button type="button" wire:click="addNewLanguage"
+                <button type="button"
+                    wire:click="addNewLanguage"
                     class="text-[10px] font-bold px-3 py-2 rounded-sm uppercase bg-emerald-600 hover:bg-emerald-700 text-white transition-colors shadow-sm">
                     Save
                 </button>
 
-                <button type="button" wire:click="$set('showAddForm', false)"
+                <button type="button"
+                    wire:click="$set('showAddForm', false)"
                     class="text-[10px] font-bold px-3 py-2 rounded-sm uppercase bg-gray-400 hover:bg-gray-500 text-white transition-colors shadow-sm">
                     X
                 </button>
@@ -453,7 +459,8 @@ new class extends Component {
 
     {{-- Translation table --}}
     <div>
-        <div class="overflow-x-auto  rounded-sm border border-gray-300 dark:border-gray-800 shadow-sm">
+        <div
+            class="overflow-x-auto  rounded-sm border border-gray-300 dark:border-gray-800 shadow-sm">
             <table class="w-full text-left border-collapse table-fixed">
                 <thead>
                     <tr
@@ -470,8 +477,9 @@ new class extends Component {
                             <tr wire:key="row-{{ $key }}"
                                 class="hover:bg-gray-50/40 dark:hover:bg-gray-900/20">
                                 {{-- Delete action cell --}}
-                                <td class="p-2 text-center align-top">
-                                    <button type="button" wire:click="deleteIndex('{{ $key }}')"
+                                <td class="p-3 text-center align-top">
+                                    <button type="button"
+                                        wire:click="deleteIndex('{{ $key }}')"
                                         wire:confirm="{{ __t('Do you really want to remove this key from all languages ?') }}"
                                         class="border border-gray-200 dark:border-gray-600 p-1 
                                         rounded-sm text-sm cursor-pointer hover:bg-red-50 
@@ -485,24 +493,22 @@ new class extends Component {
                                 {{-- Input Textarea & Tools Cell --}}
                                 <td class="p-3 align-top">
                                     <div class="flex gap-2 items-start w-full">
-                                        <textarea id="textarea-{{ $key }}" wire:blur="saveKey('{{ $key }}', $event.target.value)"
+                                        <textarea
+                                            id="textarea-{{ $key }}"
+                                            wire:blur="saveKey('{{ $key }}', $event.target.value)"
                                             rows="2"
                                             class="ui-textarea w-full text-[12px] p-2 border border-gray-300 dark:border-gray-700 rounded-sm bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 resize-y min-h-[42px]">{{ hex2bin($targetLanguageData[$key] ?? '') }}</textarea>
                                         {{-- Translate & Save Buttons --}}
                                         <div class="flex flex-col gap-1.5 shrink-0">
                                             @if ($autoTranslateEnabled)
                                                 <button type="button" wire:click="cheat('{{ $key }}')"
-                                                    class="flex items-center justify-center border border-gray-200 dark:border-gray-600 
-                                                    rounded-sm p-1.5 bg-gray-800 text-base cursor-pointer hover:text-indigo-500 
-                                                    hover:border-indigo-400 dark:hover:border-indigo-500 w-8 h-8"
+                                                    class="flex items-center justify-center border border-gray-200 dark:border-gray-600 rounded-sm p-1.5 bg-white dark:bg-gray-800 text-base cursor-pointer hover:text-indigo-500 hover:border-indigo-400 dark:hover:border-indigo-500 w-8 h-8"
                                                     title="Auto-Translate (Google)">🌐
                                                 </button>
                                             @endif
                                             <button type="button"
                                                 onclick="Livewire.dispatch('save-key', { key: '{{ $key }}', val: document.getElementById('textarea-{{ $key }}').value })"
-                                                class="flex items-center justify-center border border-gray-200 dark:border-gray-600 
-                                                rounded-sm p-1.5 bg-gray-800 text-base cursor-pointer 
-                                                hover:text-emerald-500 hover:border-emerald-400 dark:hover:border-emerald-500 w-8 h-8"
+                                                class="flex items-center justify-center border border-gray-200 dark:border-gray-600 rounded-sm p-1.5 bg-white dark:bg-gray-800 text-base cursor-pointer hover:text-emerald-500 hover:border-emerald-400 dark:hover:border-emerald-500 w-8 h-8"
                                                 title="Save Translation">✅</button>
                                         </div>
                                     </div>
@@ -517,9 +523,9 @@ new class extends Component {
 
     {{-- NEU: API Key Modal --}}
     @if ($showApiKeyModal)
-        <div class="dark fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs">
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs">
             <div
-                class="bg-[#161426] border border-gray-200 dark:border-gray-800 rounded-sm w-full max-w-md p-6 shadow-xl animate-fade-in">
+                class="bg-white dark:bg-[#161426] border border-gray-200 dark:border-gray-800 rounded-sm w-full max-w-md p-6 shadow-xl animate-fade-in">
                 <div class="text-sm font-black uppercase tracking-wider text-gray-800 dark:text-white mb-2">
                     L7 Translation Hub Cloud-Setup
                 </div>
@@ -531,7 +537,9 @@ new class extends Component {
 
                 <div class="flex flex-col gap-1 mb-4">
                     <label class="text-[9px] font-bold uppercase text-gray-400">Dein API-Key</label>
-                    <input type="password" wire:model="apiKeyInput" placeholder="l7_live_..."
+                    <input type="password"
+                        wire:model="apiKeyInput"
+                        placeholder="l7_live_..."
                         class="text-xs px-3 py-2 rounded-sm border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 w-full" />
 
                     @if ($apiErrorMessage)
@@ -541,11 +549,13 @@ new class extends Component {
                 </div>
 
                 <div class="flex justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-                    <button type="button" wire:click="$set('showApiKeyModal', false)"
+                    <button type="button"
+                        wire:click="$set('showApiKeyModal', false)"
                         class="text-[10px] font-bold px-3 py-2 rounded-sm uppercase bg-gray-400 hover:bg-gray-500 text-white transition-colors">
                         Abbrechen
                     </button>
-                    <button type="button" wire:click="verifyAndEnableApi"
+                    <button type="button"
+                        wire:click="verifyAndEnableApi"
                         class="text-[10px] font-bold px-4 py-2 rounded-sm uppercase bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-sm">
                         Verifizieren & Aktivieren
                     </button>

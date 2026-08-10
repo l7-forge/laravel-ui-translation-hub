@@ -1,9 +1,5 @@
 <?php
 
-// Usage:
-// <livewire:ui-language-switcher />
-
-
 use Livewire\Volt\Component;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Session;

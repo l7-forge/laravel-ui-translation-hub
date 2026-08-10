@@ -21,30 +21,9 @@ class LaravelUiTranslationHubServiceProvider extends ServiceProvider
         $kernel = $this->app->make(HttpKernel::class);
         $kernel->appendMiddlewareToGroup('web', SetLocaleFromSession::class);
 
-        // Nutze den Tabellennamen aus der Config
+        // 1. Nutze den Tabellennamen aus der Config
         $tableName = config('ui-translation-hub.table_name', 'l7languages');
         $this->tableExists($tableName);
-
-        // =========================================================================
-        // AUTOMATISCHES RE-PUBLISH DES FUTTERS BEI UPDATES (NUR IM DEV-MODUS)
-        // =========================================================================
-        if (config('app.env') !== 'production') {
-            $sourceFutter = dirname(__DIR__, 2) . '/resources/views/styles.blade.php';
-            $targetFutter = resource_path('views/vendor/laravel-ui-translation-hub/styles.blade.php');
-
-            // Falls die Datei beim Nutzer fehlt oder veraltet ist (andere Dateigröße/Zeitstempel),
-            // spiegeln wir sie eiskalt und automatisch rüber!
-            if (file_exists($sourceFutter)) {
-                if (!file_exists($targetFutter) || md5_file($sourceFutter) !== md5_file($targetFutter)) {
-                    if (!is_dir(dirname($targetFutter))) {
-                        mkdir(dirname($targetFutter), 0755, true);
-                    }
-                    copy($sourceFutter, $targetFutter);
-                }
-            }
-        }
-
-        // Adjust Livewire/Volt Paths
         $this->app->booted(function () {
             // 1. Hole die vorhandenen Pfade (falls doch mal was drin sein sollte)
             $currentPaths = collect(\Livewire\Volt\Volt::paths())->map(function ($path) {
@@ -67,27 +46,17 @@ class LaravelUiTranslationHubServiceProvider extends ServiceProvider
             // 5. Zurückschreiben an Volt
             \Livewire\Volt\Volt::mount($mergedPaths);
         });
-        // 1. Config
-        // Diese scripts werden nie aufgerufen, composer 
-        // fuehrt nie component scripts aus
-
+        // 3. Optional: Erlaube dem User, die Config zu publishen
         if ($this->app->runningInConsole()) {
             $this->publishes([
-                dirname(__DIR__, 2) . '/config/ui-translation-hub.php'
-                => config_path('ui-translation-hub.php'),
+                dirname(__DIR__, 2) . '/config/ui-translation-hub.php' => config_path('ui-translation-hub.php'),
             ], 'ui-translation-hub-config');
 
-            //2. styles dummy (--force)
+            // 2. NEU: Switcher-Komponente zum Kopieren bereitstellen
             $this->publishes([
-                dirname(__DIR__, 2) . '/resources/views/styles.blade.php'
-                => resource_path('views/vendor/laravel-ui-translation-hub/styles.blade.php'),
-            ], 'ui-translation-styles');
-
-            // 3. Language Switcher UI
-            $this->publishes([
-                dirname(__DIR__, 2) . '/resources/views/livewire/ui-language-switcher.blade.php'
-                => resource_path('views/vendor/laravel-ui-translation-hub/ui-language-switcher.blade.php'),
-            ], 'ui-language-switcher');
+                dirname(__DIR__, 2) . '/resources/views/livewire/laravel-ui-language-switcher.blade.php'
+                => resource_path('views/livewire/laravel-ui-language-switcher.blade.php'),
+            ], 'ui-translation-hub-switcher');
         }
     }
 
