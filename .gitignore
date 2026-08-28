@@ -27,4 +27,4 @@ Homestead.json
 .env.backup
 .env.production
 .phpactor.json
-auth.jsongit pull
+auth.json
