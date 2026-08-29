@@ -191,7 +191,123 @@ new class extends Component {
         Cache::forget("lang_json_{$this->targetLocaleIso}");
     }
     /*---------------------------------------------------------------------------------------------------------*/
-    public function cheat($hexKey)
+    /*---------------------------------------------------------------------------------------------------------*/
+    public function requestTranslation($hexKey)
+    {
+        if (!$this->autoTranslateEnabled) {
+            return;
+        }
+
+        $apiKey = session('UI_TRANSLATION_HUB_API_KEY', config('ui-translation-hub.api_key'));
+        $apiUrl = config('ui-translation-hub.api_url', 'http://127.0.0.1:8000');
+
+        $payloadData = [
+            'api_key' => $apiKey,
+            'from_code' => $this->baseLocaleIso,
+            'to_code' => $this->targetLocaleIso,
+            'source_hex' => $hexKey,
+        ];
+
+        try {
+            $ch = curl_init("{$apiUrl}/api/v1/translate");
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+
+            $jsonPayload = json_encode($payloadData);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonPayload);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json', 'Accept: application/json', 'Content-Length: ' . strlen($jsonPayload)]);
+
+            $responseBody = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            $data = json_decode($responseBody, true) ?? [];
+
+            if ($httpCode === 200 && isset($data['translation_hex'])) {
+                $this->targetLanguageData[$hexKey] = $data['translation_hex'];
+
+                if (isset($data['remaining_balance'])) {
+                    $this->wordBalance = number_format($data['remaining_balance'], 0, ',', '.');
+                }
+
+                $this->persistData();
+            }
+        } catch (\Exception $e) {
+            // Fehlerbehandlung / Log falls nötig
+        }
+    }
+    /*---------------------------------------------------------------------------------------------------------*/
+    /*---------------------------------------------------------------------------------------------------------*/
+    public function OLD1cheat($hexKey)
+    {
+        // Falls Autotranslate aktiv ist, nutzen wir unseren zentralen API-Server
+        if ($this->autoTranslateEnabled) {
+            $apiKey = session('UI_TRANSLATION_HUB_API_KEY', config('ui-translation-hub.api_key'));
+            $apiUrl = config('ui-translation-hub.api_url', 'http://127.0.0.1:8000');
+
+            $payloadData = [
+                'api_key' => $apiKey,
+                'from_code' => $this->baseLocaleIso,
+                'to_code' => $this->targetLocaleIso,
+                'source_hex' => $keyHex ?? $hexKey, // sendet den Hex-Key (source_hex)
+            ];
+
+            try {
+                $ch = curl_init("{$apiUrl}/api/v1/translate");
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+
+                $jsonPayload = json_encode($payloadData);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonPayload);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json', 'Accept: application/json', 'Content-Length: ' . strlen($jsonPayload)]);
+
+                $responseBody = curl_exec($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+
+                $data = json_decode($responseBody, true) ?? [];
+
+                // Wenn die Übersetzung erfolgreich vom Server zurückkam:
+                if ($httpCode === 200 && isset($data['translation_hex'])) {
+                    $this->targetLanguageData[$hexKey] = $data['translation_hex'];
+
+                    // Live-Update des Restguthabens aus der Server-Antwort
+                    if (isset($data['remaining_balance'])) {
+                        $this->wordBalance = number_format($data['remaining_balance'], 0, ',', '.');
+                    }
+
+                    $this->persistData();
+                    return;
+                }
+            } catch (\Exception $e) {
+                // Bei Fehler automatischer Fallback auf den direkten Client-Call
+            }
+        }
+
+        // --- FALLBACK (Direkt-Call ohne API-Server, falls Autotranslate aus ist) ---
+        $text = hex2bin($this->baseLanguageData[$hexKey]);
+        $url = 'https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&sl=' . $this->baseLocaleIso . '&tl=' . $this->targetLocaleIso . '&q=' . urlencode($text);
+
+        $response = @file_get_contents($url);
+        if ($response) {
+            $json = json_decode($response, true);
+
+            if (isset($json[0])) {
+                $translatedText = '';
+                foreach ($json[0] as $segment) {
+                    $translatedText .= $segment[0];
+                }
+
+                $this->targetLanguageData[$hexKey] = bin2hex($translatedText);
+                $this->persistData();
+            }
+        }
+    }
+    /*---------------------------------------------------------------------------------------------------------*/
+
+    public function OLDcheat($hexKey)
     {
         $text = hex2bin($this->baseLanguageData[$hexKey]);
         $url = 'https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&sl=' . $this->baseLocaleIso . '&tl=' . $this->targetLocaleIso . '&q=' . urlencode($text);
@@ -233,7 +349,7 @@ new class extends Component {
         foreach ($this->baseLanguageData as $hexKey => $value) {
             // Wir übersetzen nur, wenn es noch gar keinen Eintrag gibt ODER der Eintrag leer ist
             if (!isset($this->targetLanguageData[$hexKey]) || empty(hex2bin($this->targetLanguageData[$hexKey]))) {
-                $this->cheat($hexKey, false); // false verhindert das sofortige Speichern bei jedem einzelnen Wort
+                $this->requestTranslation($hexKey, false); // false verhindert das sofortige Speichern bei jedem einzelnen Wort
             }
         }
         // Erst wenn alle durch sind, einmalig speichern
@@ -555,7 +671,8 @@ new class extends Component {
                                         {{-- Translate & Save Buttons --}}
                                         <div class="flex flex-col gap-1.5 shrink-0">
                                             @if ($autoTranslateEnabled)
-                                                <button type="button" wire:click="cheat('{{ $key }}')"
+                                                <button type="button"
+                                                    wire:click="requestTranslation('{{ $key }}')"
                                                     class="flex items-center justify-center border border-gray-200 dark:border-gray-600 rounded-sm p-1.5 bg-white dark:bg-gray-800 text-base cursor-pointer hover:text-indigo-500 hover:border-indigo-400 dark:hover:border-indigo-500 w-8 h-8"
                                                     title="Auto-Translate (Google)">🌐
                                                 </button>
