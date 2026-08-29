@@ -74,7 +74,7 @@ new class extends Component {
         $this->wordBalance = '124.500';
     }
     /*---------------------------------------------------------------------------------------------------------*/
-    public function verifyAndEnableApi()
+    public function OLDverifyAndEnableApi()
     {
         $this->apiErrorMessage = '';
 
@@ -94,6 +94,59 @@ new class extends Component {
         $this->autoTranslateEnabled = true;
         $this->showApiKeyModal = false;
         $this->checkApiBalance();
+    }
+
+    /*---------------------------------------------------------------------------------------------------------*/
+    public function verifyApiKey()
+    {
+        $this->apiErrorMessage = '';
+
+        if (empty($this->apiKeyInput)) {
+            $this->apiErrorMessage = 'Bitte gib einen gültigen API-Key ein.';
+            return;
+        }
+
+        $apiUrl = config('ui-translation-hub.api_url', 'http://127.0.0.1:8000');
+
+        try {
+            $ch = curl_init("{$apiUrl}/api/v1/verify-key");
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+
+            // JSON Payload + Header mitsenden
+            $payload = json_encode(['api_key' => trim($this->apiKeyInput)]);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json', 'Accept: application/json', 'Content-Length: ' . strlen($payload)]);
+
+            $responseBody = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            curl_close($ch);
+
+            if ($curlError) {
+                $this->apiErrorMessage = 'cURL Fehler: ' . $curlError;
+                return;
+            }
+
+            $data = json_decode($responseBody, true) ?? [];
+
+            if ($httpCode !== 200 || ($data['status'] ?? '') !== 'success') {
+                $this->apiErrorMessage = $data['message'] ?? 'Ungültiger API-Key (Status: ' . $httpCode . ')';
+                return;
+            }
+
+            $balance = $data['remaining_balance'] ?? 0;
+            $this->wordBalance = number_format($balance, 0, ',', '.');
+
+            session(['UI_TRANSLATION_HUB_API_KEY' => trim($this->apiKeyInput)]);
+            config(['ui-translation-hub.api_key' => trim($this->apiKeyInput)]);
+
+            $this->autoTranslateEnabled = true;
+            $this->showApiKeyModal = false;
+        } catch (\Exception $e) {
+            $this->apiErrorMessage = 'Verbindung zum API-Server fehlgeschlagen: ' . $e->getMessage();
+        }
     }
     /*---------------------------------------------------------------------------------------------------------*/
     public function disableApi()
@@ -553,7 +606,7 @@ new class extends Component {
                         class="text-[10px] font-bold px-3 py-2 rounded-sm uppercase bg-gray-400 hover:bg-gray-500 text-white transition-colors">
                         Abbrechen
                     </button>
-                    <button type="button" wire:click="verifyAndEnableApi"
+                    <button type="button" wire:click="verifyApiKey"
                         class="text-[10px] font-bold px-4 py-2 rounded-sm uppercase bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-sm">
                         Verifizieren & Aktivieren
                     </button>
