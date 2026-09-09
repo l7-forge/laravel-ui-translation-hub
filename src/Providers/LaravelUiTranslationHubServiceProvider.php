@@ -57,6 +57,12 @@ class LaravelUiTranslationHubServiceProvider extends ServiceProvider
                 dirname(__DIR__, 2) . '/resources/views/livewire/laravel-ui-language-switcher.blade.php'
                 => resource_path('views/livewire/laravel-ui-language-switcher.blade.php'),
             ], 'ui-translation-hub-switcher');
+
+            // 3. Translation-Hub Dashboard Komponente
+            $this->publishes([
+                dirname(__DIR__, 2) . '/resources/views/livewire/laravel-ui-translation-hub.blade.php'
+                => resource_path('views/livewire/translation-hub.blade.php'),
+            ], 'ui-translation-hub-dashboard');
         }
     }
 
