@@ -54,13 +54,14 @@ new class extends Component {
             return;
         }
 
-        $apiUrl = config('ui-translation-hub.api_url', 'http://127.0.0.1:8000');
+        $apiUrl = config('ui-translation-hub.api_url');
 
         try {
             $ch = curl_init("{$apiUrl}/api/v1/verify-key");
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_POST, true);
             curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+            curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
 
             $payload = json_encode(['api_key' => trim($this->apiKeyInput)]);
             curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
@@ -90,13 +91,15 @@ new class extends Component {
             return;
         }
 
-        $apiUrl = config('ui-translation-hub.api_url', 'http://127.0.0.1:8000');
+        $apiUrl = config('ui-translation-hub.api_url');
 
         try {
+            session_write_close();
             $ch = curl_init("{$apiUrl}/api/v1/verify-key");
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_POST, true);
             curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+            curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
 
             $payload = json_encode(['api_key' => trim($this->apiKeyInput)]);
             curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
@@ -185,7 +188,7 @@ new class extends Component {
         }
 
         $apiKey = session('UI_TRANSLATION_HUB_API_KEY', config('ui-translation-hub.api_key'));
-        $apiUrl = config('ui-translation-hub.api_url', 'http://127.0.0.1:8000');
+        $apiUrl = config('ui-translation-hub.api_url');
 
         $payloadData = [
             'api_key' => $apiKey,
@@ -199,6 +202,7 @@ new class extends Component {
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_POST, true);
             curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+            curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
 
             $jsonPayload = json_encode($payloadData);
             curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonPayload);
@@ -408,15 +412,15 @@ new class extends Component {
                 @foreach ($baseLanguageData as $key => $value)
                     @if ($filter == 'all' || !isset($targetLanguageData[$key]))
                         <tr wire:key="row-{{ $key }}" class="hover:bg-[#080e20]/60 transition-colors">
-                            <td class="p-3 text-center align-top">
+                            <td class="p-1 text-center align-top text-[8px]">
                                 <button type="button" wire:click="deleteIndex('{{ $key }}')"
                                     wire:confirm="{{ __t('Do you really want to remove this key from all languages ?') }}"
-                                    class="p-1 rounded-sm text-xs opacity-60 hover:opacity-100 hover:bg-[#f43f5e]/20 border border-transparent hover:border-[#f43f5e] transition-all"
+                                    class="p-1 rounded-sm text-[8px] cursor-pointer opacity-40 hover:opacity-100 hover:bg-[#f43f5e]/20 
+                                    border border-transparent hover:border-[#f43f5e] transition-all"
                                     title="Delete Key">❌</button>
                             </td>
 
-                            <td
-                                class="p-3 text-[11px] font-mono font-semibold text-[#9da4af] align-top break-words select-all leading-relaxed">
+                            <td class="p-3 text-[13px] text-[#9da4af] align-top break-words select-all leading-relaxed">
                                 {{ hex2bin($key) }}
                             </td>
 
@@ -424,7 +428,8 @@ new class extends Component {
                                 <div class="flex gap-2 items-start w-full">
                                     <textarea id="textarea-{{ $key }}" wire:blur="saveKey('{{ $key }}', $event.target.value)"
                                         rows="2"
-                                        class="w-full text-xs p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none font-sans resize-y min-h-[42px]">{{ hex2bin($targetLanguageData[$key] ?? '') }}</textarea>
+                                        class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] 
+                                        focus:border-[#4f46e5] focus:outline-none resize-y min-h-[42px]">{{ hex2bin($targetLanguageData[$key] ?? '') }}</textarea>
 
                                     <div class="flex flex-col gap-1 shrink-0">
                                         @if ($autoTranslateEnabled)
@@ -435,7 +440,8 @@ new class extends Component {
                                         @endif
                                         <button type="button"
                                             onclick="Livewire.dispatch('save-key', { key: '{{ $key }}', val: document.getElementById('textarea-{{ $key }}').value })"
-                                            class="flex items-center justify-center rounded-sm p-1.5 bg-[#080e20] border border-[#374151] hover:border-[#10b981] w-8 h-8 transition-colors"
+                                            class="flex items-center justify-center rounded-sm p-1.5 bg-[#080e20] 
+                                            cursor-pointer border-[#374151] hover:border-[#10b981] w-8 h-8 transition-colors"
                                             title="Save">✅</button>
                                     </div>
                                 </div>
