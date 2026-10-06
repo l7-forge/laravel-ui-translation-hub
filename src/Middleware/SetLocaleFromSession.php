@@ -1,5 +1,5 @@
 <?php
-namespace L7Studios\LaravelUiTranslationHub\Middleware;
+namespace L7Labs\LaravelUiTranslationHub\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
