@@ -1,6 +1,6 @@
 <?php
 
-namespace L7Studios\LaravelUiTranslationHub\Providers;
+namespace L7Labs\LaravelUiTranslationHub\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Cache;
@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Schema\Blueprint;
 use Livewire\Volt\Volt;
 use Illuminate\Foundation\Http\Kernel as HttpKernel;
-use L7Studios\LaravelUiTranslationHub\Middleware\SetLocaleFromSession;
+use L7Labs\LaravelUiTranslationHub\Middleware\SetLocaleFromSession;
 
 //php artisan optimize:clear
 class LaravelUiTranslationHubServiceProvider extends ServiceProvider

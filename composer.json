@@ -1,5 +1,5 @@
 {
-    "name": "l7studios/laravel-ui-translation-hub",
+    "name": "l7labs/laravel-ui-translation-hub",
     "description": "Automated UI localization manager for Laravel with a clean Livewire dashboard and automated JSON syncing.",
     "type": "library",
     "license": "MIT",
@@ -24,7 +24,7 @@
     },
     "autoload": {
         "psr-4": {
-            "l7Studios\\LaravelUiTranslationHub\\": "src/"
+            "l7Labs\\LaravelUiTranslationHub\\": "src/"
         },
         "files": [
             "src/helpers.php"
@@ -33,7 +33,7 @@
     "extra": {
         "laravel": {
             "providers": [
-                "L7Studios\\LaravelUiTranslationHub\\Providers\\LaravelUiTranslationHubServiceProvider"
+                "L7Labs\\LaravelUiTranslationHub\\Providers\\LaravelUiTranslationHubServiceProvider"
             ]
         }
     }

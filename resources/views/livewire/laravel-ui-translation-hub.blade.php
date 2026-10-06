@@ -30,6 +30,7 @@ new class extends Component {
     public $apiKeyInput = '';
     public $wordBalance = '---'; // Restkontingent vom Server
     public $apiErrorMessage = '';
+    public $apiUrlInput = '';
 
     public function mount()
     {
@@ -37,12 +38,6 @@ new class extends Component {
         $this->baseLocaleIso = config('app.fallback_locale');
         $this->baseLanguageData = $this->loadIso($this->baseLocaleIso);
 
-        //$this->availableLocales = DB::table($this->languagesTable)->where('code', '!=', $this->baseLocaleIso)->pluck('code')->toArray();
-        // Optimierter code f. code->name
-        // [
-        //     "de" => "Deutsch",
-        //     "es" => "Español"
-        // ]
         $this->availableLocales = DB::table($this->languagesTable)
             ->where('code', '!=', $this->baseLocaleIso)
             ->pluck('name', 'code') // <--- Zuerst die Value-Spalte, dann die Key-Spalte!
@@ -63,37 +58,84 @@ new class extends Component {
     /*---------------------------------------------------------------------------------------------------------*/
     public function checkApiBalance()
     {
-        if (empty($this->apiKeyInput)) {
+        $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
+
+        if (!File::exists($configPath)) {
             return;
         }
 
-        // HINWEIS: Hier kommt später dein echter HTTP-Request zu deinem API-Server hin!
-        // $response = Http::withToken($this->apiKeyInput)->get('https://api.l7studios.de/v1/balance');
+        // 1. Bestehende Config einlesen
+        $configData = json_decode(File::get($configPath), true);
 
-        // Temporärer Mock für das UI-Testing:
-        $this->wordBalance = '124.500';
+        // 2. HTTP-Check oder eben der Mock (Schritt 1)
+        // Später:
+        // $response = Http::post($configData['server_url'] . '/balance', ['api_key' => $configData['api_key']]);
+        // $liveQuota = $response->json('remaining_quota');
+
+        // Unser aktueller Mock-Zustand, aber dynamisch veränderbar:
+        // Wir nehmen den bestehenden Wert aus der Datei und ziehen testweise nichts ab,
+        // oder nutzen den im RAM manipulierten Wert:
+        $liveQuota = isset($configData['last_known_quota']) ? $configData['last_known_quota'] : 50000;
+
+        // 3. Array-Zustand aktualisieren
+        $configData['last_known_quota'] = $liveQuota;
+        $configData['last_checked_at'] = now()->toDateTimeString();
+
+        // 4. Zurück auf die Festplatte hämmern!
+        File::put($configPath, json_encode($configData, JSON_PRETTY_PRINT));
+
+        // 5. UI-Anzeige im RAM aktualisieren
+        $this->wordBalance = number_format($liveQuota, 0, ',', '.') . ' Chars';
     }
+    /*---------------------------------------------------------------------------------------------------------*/
     /*---------------------------------------------------------------------------------------------------------*/
     public function verifyAndEnableApi()
     {
         $this->apiErrorMessage = '';
 
-        if (empty($this->apiKeyInput)) {
-            $this->apiErrorMessage = 'Bitte gib einen gültigen API-Key ein.';
+        if (empty($this->apiUrlInput) || empty($this->apiKeyInput)) {
+            $this->apiErrorMessage = __t('Bitte gib sowohl die API-URL als auch den API-Key ein.');
             return;
         }
 
-        // TODO: Hier echten Handshake mit deinem API-Server machen!
-        // $response = Http::post('https://api.l7studios.de/v1/verify', ['api_key' => $this->apiKeyInput]);
-        // if ($response->failed()) { $this->apiErrorMessage = 'Ungültiger API-Key.'; return; }
+        // Bereinigen der URL
+        $this->apiUrlInput = rtrim($this->apiUrlInput, '/');
 
-        // Wenn erfolgreich: In der Session oder Cache temporär merken,
-        // damit es bis zum permanenten .env-Eintrag aktiv bleibt
-        session(['UI_TRANSLATION_HUB_API_KEY' => $this->apiKeyInput]);
+        try {
+            // ECHTER HANDSHAKE (Schritt 2): Funkt an die eingetragene URL
+            // $response = Http::post($this->apiUrlInput . '/verify', ['api_key' => $this->apiKeyInput]);
 
-        $this->autoTranslateEnabled = true;
-        $this->showApiKeyModal = false;
-        $this->checkApiBalance();
+            // SIMULATION (Schritt 1)
+            $result = [
+                'remaining_quota' => 50000,
+                'project_name' => 'Standard Projekt',
+            ];
+
+            $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
+
+            $configData = [
+                'server_url' => $this->apiUrlInput,
+                'api_key' => $this->apiKeyInput,
+                'last_known_quota' => $result['remaining_quota'],
+                'project_name' => $result['project_name'],
+                'last_checked_at' => now()->toDateTimeString(),
+                'status' => 'active',
+            ];
+
+            File::ensureDirectoryExists(dirname($configPath));
+            File::put($configPath, json_encode($configData, JSON_PRETTY_PRINT));
+
+            config([
+                'ui-translation-hub.server_url' => $this->apiUrlInput,
+                'ui-translation-hub.api_key' => $this->apiKeyInput,
+            ]);
+
+            $this->autoTranslateEnabled = true;
+            $this->showApiKeyModal = false;
+            $this->checkApiBalance();
+        } catch (\Exception $e) {
+            $this->apiErrorMessage = __t('Verbindung zum API-Server fehlgeschlagen:') . ' ' . $e->getMessage();
+        }
     }
     /*---------------------------------------------------------------------------------------------------------*/
     public function disableApi()
@@ -327,13 +369,13 @@ new class extends Component {
 
 
             {{-- Translate All Button --}}
-            @if ($autoTranslateEnabled) 
-                    <button type="button" wire:click="translateAll" wire:loading.attr="disabled"
-                        @if (empty($availableLocales)) disabled @endif
-                        class="text-[10px] font-bold px-2 py-3 rounded-sm uppercase bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                        <span wire:loading.remove wire:target="translateAll">Translate All Missing</span>
-                        <span wire:loading wire:target="translateAll">Translating...</span>
-                    </button>
+            @if ($autoTranslateEnabled)
+                <button type="button" wire:click="translateAll" wire:loading.attr="disabled"
+                    @if (empty($availableLocales)) disabled @endif
+                    class="text-[10px] font-bold px-2 py-3 rounded-sm uppercase bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span wire:loading.remove wire:target="translateAll">Translate All Missing</span>
+                    <span wire:loading wire:target="translateAll">Translating...</span>
+                </button>
             @endif
 
             {{-- Filter Options --}}
@@ -374,12 +416,10 @@ new class extends Component {
     {{-- actionbar2-start --}}
     <div
         class="flex justify-between items-center mb-8 p-3 rounded-sm border transition-colors duration-200
-        @if ($autoTranslateEnabled) 
-                    bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-200 dark:border-indigo-900/50
+        @if ($autoTranslateEnabled) bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-200 dark:border-indigo-900/50
         @else
-                    bg-gray-100 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800 opacity-75 
-        @endif
-         ">           
+                    bg-gray-100 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800 opacity-75 @endif
+         ">
 
         {{-- Linke Seite: Checkbox / Toggle Status --}}
         <div class="flex items-center gap-3">
@@ -515,22 +555,30 @@ new class extends Component {
         </div>
     </div>
 
-    {{-- NEU: API Key Modal --}}
+    {{-- API Key Modal --}}
     @if ($showApiKeyModal)
         <div class="dark fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs">
             <div
-                class="bg-[#161426] border border-gray-200 dark:border-gray-800 rounded-sm w-full max-w-md p-6 shadow-xl animate-fade-in">
-                <div class="text-sm font-black uppercase tracking-wider text-gray-800 dark:text-white mb-2">
-                    L7 Translation Hub Cloud-Setup
+                class="bg-[#161426] border border-gray-200 dark:border-gray-800 rounded-sm w-full max-w-md p-6 shadow-xl">
+
+                <div class="text-sm font-black uppercase tracking-wider text-white mb-2">
+                    {{ __t('L7 Translation Hub Cloud-Setup') }}
                 </div>
-                <p class="text-[11px] text-gray-500 dark:text-gray-400 mb-4 leading-relaxed">
-                    Erstelle ein Projekt im Dashboard auf <a href="https://hub.l7studios.de" target="_blank"
-                        class="text-indigo-500 underline font-bold">hub.l7studios.de</a>, um deinen API-Key zu erhalten.
-                    Das automatische Kontingent spart dir wertvolle Zeit beim Übersetzen.
+
+                <p class="text-[11px] text-gray-400 mb-4 leading-relaxed">
+                    {{ __t('Erstelle ein Projekt im Dashboard auf hub.l7-labs-com, um deinen API-Key und die Server-URL zu erhalten.') }}
                 </p>
 
+                {{-- Input: API-Server URL --}}
+                <div class="flex flex-col gap-1 mb-3">
+                    <label class="text-[9px] font-bold uppercase text-gray-400">{{ __t('API-Server URL') }}</label>
+                    <input type="text" wire:model="apiUrlInput" placeholder="https://hub.l7-labs.de/api/v1"
+                        class="text-xs px-3 py-2 rounded-sm border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 w-full" />
+                </div>
+
+                {{-- Input: API-Key --}}
                 <div class="flex flex-col gap-1 mb-4">
-                    <label class="text-[9px] font-bold uppercase text-gray-400">Dein API-Key</label>
+                    <label class="text-[9px] font-bold uppercase text-gray-400">{{ __t('Dein API-Key') }}</label>
                     <input type="password" wire:model="apiKeyInput" placeholder="l7_live_..."
                         class="text-xs px-3 py-2 rounded-sm border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 w-full" />
 
@@ -540,16 +588,18 @@ new class extends Component {
                     @endif
                 </div>
 
+                {{-- Buttons --}}
                 <div class="flex justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
                     <button type="button" wire:click="$set('showApiKeyModal', false)"
                         class="text-[10px] font-bold px-3 py-2 rounded-sm uppercase bg-gray-400 hover:bg-gray-500 text-white transition-colors">
-                        Abbrechen
+                        {{ __t('Abbrechen') }}
                     </button>
                     <button type="button" wire:click="verifyAndEnableApi"
                         class="text-[10px] font-bold px-4 py-2 rounded-sm uppercase bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-sm">
-                        Verifizieren & Aktivieren
+                        {{ __t('Verifizieren & Aktivieren') }}
                     </button>
                 </div>
+
             </div>
         </div>
     @endif
