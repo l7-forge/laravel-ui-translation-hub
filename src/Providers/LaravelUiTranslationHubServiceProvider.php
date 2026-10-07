@@ -62,7 +62,7 @@ class LaravelUiTranslationHubServiceProvider extends ServiceProvider
             $this->publishes([
                 dirname(__DIR__, 2) . '/resources/views/livewire/l7-translator-dashboard.blade.php'
                 => resource_path('views/livewire/l7-translator-dashboard.blade.php'),
-            ], 'l7-translaor-dashboard');
+            ], 'l7-translator-dashboard');
         }
     }
 
