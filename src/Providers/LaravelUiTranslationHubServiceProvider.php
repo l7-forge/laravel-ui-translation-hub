@@ -54,14 +54,14 @@ class LaravelUiTranslationHubServiceProvider extends ServiceProvider
 
             // 2. NEU: Switcher-Komponente zum Kopieren bereitstellen
             $this->publishes([
-                dirname(__DIR__, 2) . '/resources/views/livewire/laravel-ui-language-switcher.blade.php'
-                => resource_path('views/livewire/laravel-ui-language-switcher.blade.php'),
+                dirname(__DIR__, 2) . '/resources/views/livewire/l7-language-switcher.blade.php'
+                => resource_path('views/livewire/l7-language-switcher.blade.php'),
             ], 'ui-language-switcher');
 
             // 3. Translation-Hub Dashboard Komponente
             $this->publishes([
-                dirname(__DIR__, 2) . '/resources/views/livewire/laravel-ui-translation-hub.blade.php'
-                => resource_path('views/livewire/translation-hub.blade.php'),
+                dirname(__DIR__, 2) . '/resources/views/livewire/l7-translator-dashboard.blade.php'
+                => resource_path('views/livewire/l7-translator-dashboard.blade.php'),
             ], 'ui-translation-hub');
         }
     }
