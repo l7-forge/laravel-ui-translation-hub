@@ -15,4 +15,5 @@ return [
     |
     */
     'api_url' => env('UI_TRANSLATION_HUB_API_URL', 'http://l7-translation-api-server.test'),
+    'api_debug' => env('UI_TRANSLATION_HUB_API_DEBUG', true),
 ];
