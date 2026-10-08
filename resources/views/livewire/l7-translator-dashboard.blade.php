@@ -89,7 +89,7 @@ new class extends Component {
     {
         $this->apiErrorMessage = '';
 
-        //do we have an API Key?
+        // Check, ob API Key da ist
         if (empty($this->apiKeyInput)) {
             $this->apiErrorMessage = __t('Bitte gib deinen API-Key ein.');
             return;
@@ -109,7 +109,7 @@ new class extends Component {
             $durationMs = (int) round((microtime(true) - $startTime) * 1000);
             $responseData = $response->json() ?? [];
 
-            // Dev Radar füttern
+            // Dev Radar füttern (Normaler HTTP Response)
             if ($this->apiDebugEnabled) {
                 $this->lastApiInspect = [
                     'timestamp' => now()->format('H:i:s.v'),
@@ -121,7 +121,7 @@ new class extends Component {
                         'url' => $fullEndpoint,
                         'payload' => ['api_key' => substr($this->apiKeyInput, 0, 6) . '...***'],
                     ],
-                    'response' => $responseData,
+                    'response' => $responseData ?: $response->body(),
                     'error' => $response->failed() ? "HTTP Error {$response->status()}" : null,
                 ];
             }
@@ -139,9 +139,31 @@ new class extends Component {
                 $this->apiErrorMessage = $responseData['message'] ?? 'Verifizierung fehlgeschlagen.';
             }
         } catch (\Throwable $e) {
+            $durationMs = (int) round((microtime(true) - $startTime) * 1000);
+
+            // WICHTIG: Dev Radar AUCH BEI EXCEPTIONS füttern!
+            if ($this->apiDebugEnabled) {
+                $this->lastApiInspect = [
+                    'timestamp' => now()->format('H:i:s.v'),
+                    'status' => 500,
+                    'successful' => false,
+                    'duration_ms' => $durationMs,
+                    'request' => [
+                        'method' => 'POST',
+                        'url' => $fullEndpoint,
+                        'payload' => ['api_key' => substr($this->apiKeyInput, 0, 6) . '...***'],
+                    ],
+                    'response' => [
+                        'exception' => get_class($e),
+                        'message' => $e->getMessage(),
+                    ],
+                    'error' => $e->getMessage(),
+                ];
+            }
+
             $this->apiErrorMessage = 'Verbindung zum API-Server fehlgeschlagen: ' . $e->getMessage();
         }
-    }
+    }  
     //------------------------------------------------------------------------------------------------------------
 
     //Cloud Schalter off
