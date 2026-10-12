@@ -635,7 +635,8 @@ new class extends Component {
                                     <div class="flex gap-2 items-start w-full">
                                         <textarea id="textarea-{{ $key }}" wire:blur="saveKey('{{ $key }}',$event.target.value)"
                                             rows="2"
-                                            class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none resize-y min-h-[42px]">{{ hex2bin($targetLanguageData[$key] ?? '') }}</textarea>
+                                            class="w-full text-[13px] p-2 rounded-sm border border-[#374151] 
+                                            !bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none resize-y min-h-[42px]">{{ hex2bin($targetLanguageData[$key] ?? '') }}</textarea>
 
                                         <div class="flex flex-col gap-1 shrink-0">
                                             @if ($autoTranslateEnabled)
