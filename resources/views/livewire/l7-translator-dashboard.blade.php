@@ -57,7 +57,7 @@ new class extends Component {
 
         $this->apiDebugEnabled = config('ui-translation-hub.api_debug', false);
 
-        // Direkt über die lokale config.json steuern
+        // Direkt über die lokale config.json steuern (ohne redundante Session)
         $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
         $savedKey = null;
 
@@ -143,8 +143,6 @@ new class extends Component {
             }
 
             if ($response->successful() && ($responseData['status'] ?? '') === 'success') {
-                session(['UI_TRANSLATION_HUB_API_KEY' => $this->apiKeyInput]);
-
                 // Persistente Speicherung in der lokalen config.json des User-Projekts
                 $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
                 $configData = [];
@@ -207,9 +205,7 @@ new class extends Component {
     //Cloud Schalter off
     public function disableApi()
     {
-        session()->forget('UI_TRANSLATION_HUB_API_KEY');
-
-        // Auch aus der lokalen config.json entfernen oder als inaktiv markieren
+        // Aus der lokalen config.json entfernen oder als inaktiv markieren
         $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
         if (File::exists($configPath)) {
             $configData = json_decode(File::get($configPath), true) ?? [];
@@ -273,13 +269,11 @@ new class extends Component {
             return;
         }
 
-        $apiKey = session('UI_TRANSLATION_HUB_API_KEY');
-        if (empty($apiKey)) {
-            $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
-            if (File::exists($configPath)) {
-                $configData = json_decode(File::get($configPath), true) ?? [];
-                $apiKey = $configData['api_key'] ?? null;
-            }
+        $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
+        $apiKey = null;
+        if (File::exists($configPath)) {
+            $configData = json_decode(File::get($configPath), true) ?? [];
+            $apiKey = $configData['api_key'] ?? null;
         }
 
         $payloadData = [
@@ -328,7 +322,6 @@ new class extends Component {
                     $this->wordBalance = number_format($remaining, 0, ',', '.') . ' Chars';
 
                     // Update auch in der lokalen config.json festhalten
-                    $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
                     if (File::exists($configPath)) {
                         $configData = json_decode(File::get($configPath), true) ?? [];
                         $configData['last_known_quota'] = $remaining;
@@ -646,7 +639,7 @@ new class extends Component {
                                     </button>
                                 </td>
 
-                                {{-- Source Spalte als optisches Pendant im Textarea-Look --}}
+                                {{-- Source Spalte als Readonly-Textarea (Symmetrisch) --}}
                                 <td class="p-3 align-top">
                                     <textarea rows="2" readonly
                                         class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16]/60 text-[#9da4af] cursor-default focus:outline-none resize-y min-h-[42px] select-all">{{ hex2bin($key) }}</textarea>
