@@ -615,11 +615,15 @@ new class extends Component {
                     @foreach ($baseLanguageData as $key => $value)
                         @if ($filter == 'all' || !isset($targetLanguageData[$key]))
                             <tr wire:key="row-{{ $key }}" class="hover:bg-[#080e20]/60 transition-colors">
-                                <td class="p-1 text-center align-top text-[8px]">
+                                <td class="p-3 text-center align-top">
                                     <button type="button" wire:click="deleteIndex('{{ $key }}')"
                                         wire:confirm="{{ __t('Do you really want to remove this key from all languages ?') }}"
-                                        class="p-1 rounded-sm text-[8px] cursor-pointer opacity-40 hover:opacity-100 hover:bg-[#f43f5e]/20 border border-transparent hover:border-[#f43f5e] transition-all"
-                                        title="Delete Key">❌</button>
+                                        class="flex items-center justify-center rounded-sm p-1.5 bg-[#080e20] border border-[#374151] hover:border-[#f43f5e] hover:bg-[#f43f5e]/20 text-[#9da4af] hover:text-[#f43f5e] w-8 h-8 transition-colors cursor-pointer"
+                                        title="{{ __t('Delete Key') }}">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 0 1 0 0-1-1h-4a1 0 1 0 0 1 1v3M4 7h16"></path>
+                                        </svg>
+                                    </button>
                                 </td>
 
                                 <td
