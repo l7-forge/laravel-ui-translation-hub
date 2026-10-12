@@ -75,13 +75,45 @@ new class extends Component {
         }
 
         $configData = json_decode(File::get($configPath), true);
-        $liveQuota = isset($configData['last_known_quota']) ? $configData['last_known_quota'] : 50000;
+        $savedKey = $configData['api_key'] ?? null;
 
-        $configData['last_known_quota'] = $liveQuota;
-        $configData['last_checked_at'] = now()->toDateTimeString();
+        if (empty($savedKey)) {
+            $this->disableApi();
+            return;
+        }
 
-        File::put($configPath, json_encode($configData, JSON_PRETTY_PRINT));
-        $this->wordBalance = number_format($liveQuota, 0, ',', '.') . ' Chars';
+        // Optional: Einen schnellen Server-Check machen, um zu verifizieren, ob der Key noch aktiv ist und das Kontingent reicht
+        $fullEndpoint = rtrim($this->apiUrl, '/') . '/verify-key';
+
+        try {
+            $response = Http::timeout(5)->acceptJson()->asJson()->post($fullEndpoint, [
+                'api_key' => $savedKey,
+            ]);
+
+            $responseData = $response->json();
+
+            // Wenn Key ungültig, gesperrt oder Kontingent leer (<= 0)
+            if (!$response->successful() || ($responseData['status'] ?? '') !== 'success' || (isset($responseData['remaining_balance']) && $responseData['remaining_balance'] <= 0)) {
+                $this->disableApi();
+                return;
+            }
+
+            $liveQuota = $responseData['remaining_balance'] ?? ($configData['last_known_quota'] ?? 50000);
+
+            // Aktualisiere den lokalen Cache
+            $configData['last_known_quota'] = $liveQuota;
+            $configData['last_checked_at'] = now()->toDateTimeString();
+            File::put($configPath, json_encode($configData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
+            $this->wordBalance = number_format($liveQuota, 0, ',', '.') . ' Chars';
+            $this->autoTranslateEnabled = true;
+
+        } catch (\Throwable $e) {
+            // Bei Verbindungsproblemen greifen wir auf den gecachten Wert zurück, deaktivieren aber nicht sofort stumpf, 
+            // es sei denn, der Cache sagt klar, das Kontingent war leer.
+            $cachedQuota = $configData['last_known_quota'] ?? 0;
+            $this->wordBalance = number_format($cachedQuota, 0, ',', '.') . ' Chars (Cached)';
+        }
     }
     //------------------------------------------------------------------------------------------------------------
 
@@ -89,7 +121,6 @@ new class extends Component {
     {
         $this->apiErrorMessage = '';
 
-        // Check, ob API Key da ist
         if (empty($this->apiKeyInput)) {
             $this->apiErrorMessage = __t('Bitte gib deinen API-Key ein.');
             return;
@@ -107,9 +138,12 @@ new class extends Component {
                 ]);
 
             $durationMs = (int) round((microtime(true) - $startTime) * 1000);
-            $responseData = $response->json() ?? [];
+            
+            $responseData = $response->json();
+            if ($responseData === null) {
+                $responseData = ['raw_output' => $response->body()];
+            }
 
-            // Dev Radar füttern (Normaler HTTP Response)
             if ($this->apiDebugEnabled) {
                 $this->lastApiInspect = [
                     'timestamp' => now()->format('H:i:s.v'),
@@ -121,13 +155,36 @@ new class extends Component {
                         'url' => $fullEndpoint,
                         'payload' => ['api_key' => substr($this->apiKeyInput, 0, 6) . '...***'],
                     ],
-                    'response' => $responseData ?: $response->body(),
+                    'response' => $responseData,
                     'error' => $response->failed() ? "HTTP Error {$response->status()}" : null,
                 ];
             }
 
             if ($response->successful() && ($responseData['status'] ?? '') === 'success') {
                 session(['UI_TRANSLATION_HUB_API_KEY' => $this->apiKeyInput]);
+
+                // Persistente Speicherung in der lokalen config.json des User-Projekts
+                $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
+                $configData = [];
+                
+                if (File::exists($configPath)) {
+                    $configData = json_decode(File::get($configPath), true) ?? [];
+                } else {
+                    $dir = dirname($configPath);
+                    if (!is_dir($dir)) {
+                        mkdir($dir, 0755, true);
+                    }
+                }
+
+                // Echte Server-Werte übernehmen ohne Dummy-Fallback
+                $configData['server_url'] = $this->apiUrl;
+                $configData['api_key'] = $this->apiKeyInput;
+                $configData['last_known_quota'] = $responseData['remaining_balance'] ?? 0;
+                $configData['project_name'] = $responseData['project_name'] ?? 'Standard Projekt';
+                $configData['last_checked_at'] = now()->toDateTimeString();
+                $configData['status'] = 'active';
+
+                File::put($configPath, json_encode($configData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
                 $this->autoTranslateEnabled = true;
                 $this->showApiKeyModal = false;
@@ -136,12 +193,11 @@ new class extends Component {
                     $this->wordBalance = number_format($responseData['remaining_balance'], 0, ',', '.') . ' Chars';
                 }
             } else {
-                $this->apiErrorMessage = $responseData['message'] ?? 'Verifizierung fehlgeschlagen.';
+                $this->apiErrorMessage = $responseData['message'] ?? 'The route verify-key could not be found.';
             }
         } catch (\Throwable $e) {
             $durationMs = (int) round((microtime(true) - $startTime) * 1000);
 
-            // WICHTIG: Dev Radar AUCH BEI EXCEPTIONS füttern!
             if ($this->apiDebugEnabled) {
                 $this->lastApiInspect = [
                     'timestamp' => now()->format('H:i:s.v'),
@@ -163,7 +219,7 @@ new class extends Component {
 
             $this->apiErrorMessage = 'Verbindung zum API-Server fehlgeschlagen: ' . $e->getMessage();
         }
-    }  
+    }
     //------------------------------------------------------------------------------------------------------------
 
     //Cloud Schalter off
@@ -391,6 +447,67 @@ new class extends Component {
 ?>
 
 <div class="relative">
+    {{-- Full-Width Top API Radar Overlay --}}
+    @if ($apiDebugEnabled)
+        <div x-data="{ expanded: true }" class="fixed top-0 left-0 right-0 z-50 bg-[#010413] border-b border-[#4f46e5] shadow-2xl font-sans">
+
+            {{-- Header / Taskbar Bar --}}
+            <div class="flex items-center justify-between px-4 py-2 bg-[#161426] border-b border-[#374151]">
+                <div class="flex items-center space-x-3">
+                    <span class="w-3 h-3 rounded-full bg-[#4f46e5] animate-pulse"></span>
+                    <span class="text-xs font-black uppercase tracking-wider text-[#f8fafc]">API Radar (Dev Log & Inspect)</span>
+                </div>
+                <div class="flex items-center space-x-3">
+                    @if ($lastApiInspect)
+                        <span class="px-2 py-0.5 text-[10px] font-bold rounded uppercase {{ ($lastApiInspect['successful'] ?? false) ? 'bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/40' : 'bg-[#f43f5e]/20 text-[#f43f5e] border border-[#f43f5e]/40' }}">
+                            {{ ($lastApiInspect['status'] ?? 0) === 0 ? 'FAIL' : ($lastApiInspect['status'] . ' ' . (($lastApiInspect['successful'] ?? false) ? 'OK' : 'ERR')) }}
+                        </span>
+                        <span class="text-xs font-mono text-[#9da4af]">{{ $lastApiInspect['duration_ms'] ?? 0 }} ms</span>
+                        <span class="text-[10px] font-mono text-[#9da4af]">{{ $lastApiInspect['timestamp'] ?? '' }}</span>
+                    @endif
+                    <button type="button" @click="expanded = !expanded"
+                        class="text-xs font-bold text-[#9da4af] hover:text-white px-3 py-1 bg-[#0c0b16] border border-[#374151] rounded cursor-pointer">
+                        <span x-show="expanded">Minimieren &minus;</span>
+                        <span x-show="!expanded">Taskleiste öffnen &plus;</span>
+                    </button>
+                </div>
+            </div>
+
+            {{-- Inspector Content mit vertikalem Scrollen --}}
+            <div x-show="expanded" x-transition class="p-4 space-y-4 max-h-[350px] overflow-y-auto bg-[#161426]/95 backdrop-blur-md">
+                @if ($lastApiInspect)
+                    @if (!empty($lastApiInspect['error']))
+                        <div class="p-3 bg-[#f43f5e]/10 border border-[#f43f5e]/30 rounded text-xs font-mono text-[#f43f5e]">
+                            ⚠️ {{ $lastApiInspect['error'] }}
+                        </div>
+                    @endif
+
+                    <div>
+                        <div class="text-[10px] font-bold uppercase tracking-wider text-[#9da4af] mb-1">&rarr; Request URL & Method</div>
+                        <div class="bg-[#0c0b16] p-3 rounded border border-[#374151] text-xs font-mono text-[#4f46e5] break-all">
+                            <span class="font-bold uppercase">[{{ $lastApiInspect['request']['method'] ?? 'POST' }}]</span> {{ $lastApiInspect['request']['url'] ?? '' }}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <div class="text-[10px] font-bold uppercase tracking-wider text-[#9da4af] mb-1">&rarr; Outgoing Payload</div>
+                            <pre class="bg-[#0c0b16] p-3 rounded border border-[#374151] text-xs font-mono text-[#f8fafc] overflow-y-auto max-h-48"><code>{{ json_encode($lastApiInspect['request']['payload'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</code></pre>
+                        </div>
+                        <div>
+                            <div class="text-[10px] font-bold uppercase tracking-wider text-[#9da4af] mb-1">&leftarrow; Incoming Response</div>
+                            <pre class="bg-[#0c0b16] p-3 rounded border border-[#374151] text-xs font-mono text-[#10b981] overflow-y-auto max-h-48"><code>{{ json_encode($lastApiInspect['response'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</code></pre>
+                        </div>
+                    </div>
+                @else
+                    <div class="py-6 text-center text-xs italic text-[#9da4af]">
+                        Warte auf API-Aufrufe... (Klicke auf 🌐 bei einem String oder teste die Verifizierung)
+                    </div>
+                @endif
+            </div>
+        </div>
+    @endif
+
     {{-- Main Canvas-Dark Container --}}
     <div class="p-5 rounded-sm border border-[#374151] bg-[#161426] text-[#9da4af] shadow-2xl font-sans">
 
@@ -559,7 +676,6 @@ new class extends Component {
             </div>
         @endif
 
-        {{{-- API Key Modal --}}
         {{-- API Key Modal --}}
         @if ($showApiKeyModal)
             <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs">
@@ -613,92 +729,4 @@ new class extends Component {
         @endif
 
     </div> {{-- / Main Canvas-Dark Container --}}
-
-    {{-- Floating Draggable API Radar Overlay --}}
-    @if ($apiDebugEnabled)
-        <div wire:ignore x-data="{
-            minimized: false,
-            posX: Math.max(20, window.innerWidth - 520),
-            posY: Math.max(20, window.innerHeight - 460),
-            isDragging: false,
-            startX: 0,
-            startY: 0,
-            dragStart(e) {
-                this.isDragging = true;
-                this.startX = e.clientX - this.posX;
-                this.startY = e.clientY - this.posY;
-            },
-            dragMove(e) {
-                if (!this.isDragging) return;
-                this.posX = e.clientX - this.startX;
-                this.posY = e.clientY - this.startY;
-            },
-            dragEnd() {
-                this.isDragging = false;
-            }
-        }" @mousemove.window="dragMove($event)" @mouseup.window="dragEnd()"
-            :style="`position: fixed; top: ${posY}px; left: ${posX}px; z-index: 9999;`"
-            class="w-96 md:w-[480px] bg-[#010413] border border-[#374151] rounded-sm shadow-2xl font-sans select-none overflow-hidden">
-
-            {{-- Header / Drag Bar --}}
-            <div @mousedown="dragStart($event)"
-                class="flex items-center justify-between p-2.5 bg-[#161426] border-b border-[#374151] cursor-move">
-                <div class="flex items-center space-x-2">
-                    <span class="w-2 h-2 rounded-full bg-[#4f46e5] animate-pulse"></span>
-                    <span class="text-[10px] font-black uppercase tracking-wider text-[#f8fafc]">API Radar (Dev
-                        Log)</span>
-                </div>
-                <div class="flex items-center space-x-2">
-                    <button type="button" @click="minimized = !minimized"
-                        class="text-xs text-[#9da4af] hover:text-white px-1 cursor-pointer">
-                        <span x-show="!minimized">&minus;</span>
-                        <span x-show="minimized">&plus;</span>
-                    </button>
-                </div>
-            </div>
-
-            {{-- Inspector Content --}}
-            <div x-show="!minimized" class="p-3 space-y-3 max-h-[420px] overflow-y-auto bg-[#161426]">
-                @if ($lastApiInspect)
-                    <div class="flex items-center justify-between border-b border-[#374151] pb-2">
-                        <div class="flex items-center space-x-2">
-                            <span
-                                class="px-1.5 py-0.5 text-[9px] font-bold rounded uppercase {{ $lastApiInspect['successful'] ? 'bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/40' : 'bg-[#f43f5e]/20 text-[#f43f5e] border border-[#f43f5e]/40' }}">
-                                {{ $lastApiInspect['status'] === 0 ? 'FAIL' : $lastApiInspect['status'] . ' ' . ($lastApiInspect['successful'] ? 'OK' : 'ERR') }}
-                            </span>
-                            <span class="text-[10px] font-mono text-[#9da4af]">{{ $lastApiInspect['duration_ms'] }}
-                                ms</span>
-                        </div>
-                        <span class="text-[9px] font-mono text-[#9da4af]">{{ $lastApiInspect['timestamp'] }}</span>
-                    </div>
-
-                    @if ($lastApiInspect['error'])
-                        <div
-                            class="p-2 bg-[#f43f5e]/10 border border-[#f43f5e]/30 rounded text-[10px] font-mono text-[#f43f5e]">
-                            ⚠️ {{ $lastApiInspect['error'] }}
-                        </div>
-                    @endif
-
-                    <div>
-                        <div class="text-[9px] font-bold uppercase text-[#9da4af] mb-1">&rarr; Outgoing Payload</div>
-                        <pre
-                            class="bg-[#0c0b16] p-2 rounded border border-[#374151] text-[10px] font-mono text-[#f8fafc] overflow-x-auto max-h-28">
-                            <code>{{ json_encode($lastApiInspect['request']['payload'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</code>
-                        </pre>
-                    </div>
-
-                    <div>
-                        <div class="text-[9px] font-bold uppercase text-[#9da4af] mb-1">&leftarrow; Incoming Response
-                        </div>
-                        <pre
-                            class="bg-[#0c0b16] p-2 rounded border border-[#374151] text-[10px] font-mono text-[#10b981] overflow-x-auto max-h-36"><code>{{ json_encode($lastApiInspect['response'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</code></pre>
-                    </div>
-                @else
-                    <div class="py-6 text-center text-[10px] italic text-[#9da4af]">
-                        Warte auf API-Aufrufe... (Klicke auf 🌐 bei einem String)
-                    </div>
-                @endif
-            </div>
-        </div>
-    @endif
 </div>
