@@ -57,7 +57,15 @@ new class extends Component {
 
         $this->apiDebugEnabled = config('ui-translation-hub.api_debug', false);
 
-        $savedKey = session('UI_TRANSLATION_HUB_API_KEY', config('ui-translation-hub.api_key'));
+        $savedKey = session('UI_TRANSLATION_HUB_API_KEY');
+        if (empty($savedKey)) {
+            $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
+            if (File::exists($configPath)) {
+                $configData = json_decode(File::get($configPath), true) ?? [];
+                $savedKey = $configData['api_key'] ?? null;
+            }
+        }
+
         if (!empty($savedKey)) {
             $this->apiKeyInput = $savedKey;
             $this->autoTranslateEnabled = true;
@@ -82,38 +90,10 @@ new class extends Component {
             return;
         }
 
-        // Optional: Einen schnellen Server-Check machen, um zu verifizieren, ob der Key noch aktiv ist und das Kontingent reicht
-        $fullEndpoint = rtrim($this->apiUrl, '/') . '/verify-key';
-
-        try {
-            $response = Http::timeout(5)->acceptJson()->asJson()->post($fullEndpoint, [
-                'api_key' => $savedKey,
-            ]);
-
-            $responseData = $response->json();
-
-            // Wenn Key ungültig, gesperrt oder Kontingent leer (<= 0)
-            if (!$response->successful() || ($responseData['status'] ?? '') !== 'success' || (isset($responseData['remaining_balance']) && $responseData['remaining_balance'] <= 0)) {
-                $this->disableApi();
-                return;
-            }
-
-            $liveQuota = $responseData['remaining_balance'] ?? ($configData['last_known_quota'] ?? 50000);
-
-            // Aktualisiere den lokalen Cache
-            $configData['last_known_quota'] = $liveQuota;
-            $configData['last_checked_at'] = now()->toDateTimeString();
-            File::put($configPath, json_encode($configData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-
-            $this->wordBalance = number_format($liveQuota, 0, ',', '.') . ' Chars';
-            $this->autoTranslateEnabled = true;
-
-        } catch (\Throwable $e) {
-            // Bei Verbindungsproblemen greifen wir auf den gecachten Wert zurück, deaktivieren aber nicht sofort stumpf, 
-            // es sei denn, der Cache sagt klar, das Kontingent war leer.
-            $cachedQuota = $configData['last_known_quota'] ?? 0;
-            $this->wordBalance = number_format($cachedQuota, 0, ',', '.') . ' Chars (Cached)';
-        }
+        // Rein lokales Auslesen des Kontingents ohne blockierenden HTTP-Request beim Mount
+        $cachedQuota = $configData['last_known_quota'] ?? 0;
+        $this->wordBalance = number_format($cachedQuota, 0, ',', '.') . ' Chars';
+        $this->autoTranslateEnabled = true;
     }
     //------------------------------------------------------------------------------------------------------------
 
@@ -176,7 +156,7 @@ new class extends Component {
                     }
                 }
 
-                // Echte Server-Werte übernehmen ohne Dummy-Fallback
+                // Vollständiger Key und strukturierte Server-Werte übernehmen
                 $configData['server_url'] = $this->apiUrl;
                 $configData['api_key'] = $this->apiKeyInput;
                 $configData['last_known_quota'] = $responseData['remaining_balance'] ?? 0;
@@ -226,6 +206,16 @@ new class extends Component {
     public function disableApi()
     {
         session()->forget('UI_TRANSLATION_HUB_API_KEY');
+        
+        // Auch aus der lokalen config.json entfernen oder als inaktiv markieren
+        $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
+        if (File::exists($configPath)) {
+            $configData = json_decode(File::get($configPath), true) ?? [];
+            $configData['api_key'] = '';
+            $configData['status'] = 'inactive';
+            File::put($configPath, json_encode($configData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        }
+
         $this->autoTranslateEnabled = false;
         $this->wordBalance = '---';
         $this->apiKeyInput = '';
@@ -281,7 +271,14 @@ new class extends Component {
             return;
         }
 
-        $apiKey = session('UI_TRANSLATION_HUB_API_KEY', config('ui-translation-hub.api_key'));
+        $apiKey = session('UI_TRANSLATION_HUB_API_KEY');
+        if (empty($apiKey)) {
+            $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
+            if (File::exists($configPath)) {
+                $configData = json_decode(File::get($configPath), true) ?? [];
+                $apiKey = $configData['api_key'] ?? null;
+            }
+        }
 
         $payloadData = [
             'api_key' => $apiKey,
@@ -325,7 +322,20 @@ new class extends Component {
                 $this->targetLanguageData[$hexKey] = $responseData['translation_hex'];
 
                 if (isset($responseData['remaining_balance'])) {
-                    $this->wordBalance = number_format($responseData['remaining_balance'], 0, ',', '.') . ' Chars';
+                    $remaining = $responseData['remaining_balance'];
+                    $this->wordBalance = number_format($remaining, 0, ',', '.') . ' Chars';
+
+                    // Update auch in der lokalen config.json festhalten
+                    $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
+                    if (File::exists($configPath)) {
+                        $configData = json_decode(File::get($configPath), true) ?? [];
+                        $configData['last_known_quota'] = $remaining;
+                        File::put($configPath, json_encode($configData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+                    }
+
+                    if ($remaining <= 0) {
+                        $this->disableApi();
+                    }
                 }
 
                 $this->persistData();
@@ -563,17 +573,17 @@ new class extends Component {
 
         {{-- Cloud / Autotranslate Banner --}}
         <div
-            class="flex justify-between items-center mb-8 p-3 rounded-sm border transition-colors duration-200 @if ($autoTranslateEnabled) bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-200 dark:border-indigo-900/50 @else bg-gray-100 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800 opacity-75 @endif">
+            class="flex justify-between items-center mb-8 p-3 rounded-sm border transition-colors duration-200 {{ $autoTranslateEnabled ? 'bg-[#10b981]/10 border-[#10b981]/40 text-[#10b981]' : 'bg-[#f59e0b]/10 border-[#f59e0b]/40 text-[#f59e0b]' }}">
             <div class="flex items-center gap-3">
                 <label class="relative inline-flex items-center cursor-pointer select-none">
                     <input type="checkbox"
                         wire:click="{{ $autoTranslateEnabled ? 'disableApi' : '$set(\'showApiKeyModal\', true)' }}"
                         @checked($autoTranslateEnabled) class="sr-only peer">
                     <div
-                        class="w-8 h-4 bg-[#1c1a2e] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[#4f46e5]">
+                        class="w-8 h-4 bg-[#1c1a2e] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all {{ $autoTranslateEnabled ? 'peer-checked:bg-[#10b981]' : 'bg-[#f59e0b]' }}">
                     </div>
-                    <span class="ml-2 text-[10px] font-bold uppercase tracking-wider text-[#f8fafc]">
-                        {{ $autoTranslateEnabled ? 'Cloud Translation Active' : 'Enable Cloud Autotranslate' }}
+                    <span class="ml-2 text-[10px] font-black uppercase tracking-wider {{ $autoTranslateEnabled ? 'text-[#10b981]' : 'text-[#f59e0b]' }}">
+                        {{ $autoTranslateEnabled ? 'Cloud Translation Active' : 'Cloud Translation Inactive (Setup Required)' }}
                     </span>
                 </label>
             </div>
@@ -582,11 +592,10 @@ new class extends Component {
                 @if ($autoTranslateEnabled)
                     <span class="text-[10px] font-bold uppercase text-[#9da4af]">
                         Remaining Words: <span
-                            class="text-[#f8fafc] font-mono font-black ml-1">{{ $wordBalance }}</span>
+                            class="text-[#10b981] font-mono font-black ml-1">{{ $wordBalance }}</span>
                     </span>
                 @else
-                    <span class="text-[10px] italic text-[#9da4af]">Connect your L7 Translation Hub Account to unlock
-                        Cloud Features.</span>
+                    <span class="text-[10px] italic text-[#f59e0b]">Connect your L7 Translation Hub Account to unlock Cloud Features.</span>
                 @endif
             </div>
         </div>
