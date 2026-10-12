@@ -547,7 +547,7 @@ new class extends Component {
                 @if ($autoTranslateEnabled)
                     <button type="button" wire:click="translateAll" wire:loading.attr="disabled"
                         @if (empty($availableLocales)) disabled @endif
-                        class="text-[10px] font-bold px-2 py-3 rounded-sm uppercase bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        class="text-[10px] font-bold px-3 py-3 rounded-sm uppercase bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 disabled:cursor-not-allowed min-w-[170px] text-center">
                         <span wire:loading.remove wire:target="translateAll">Translate All Missing</span>
                         <span wire:loading wire:target="translateAll">Translating...</span>
                     </button>
