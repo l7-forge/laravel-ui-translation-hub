@@ -66,6 +66,8 @@ new class extends Component {
             $this->apiKeyInput = $savedKey;
             $this->autoTranslateEnabled = true;
             $this->checkApiBalance();
+        } else {
+            $this->disableApi();
         }
     }
     //------------------------------------------------------------------------------------------------------------
@@ -113,7 +115,7 @@ new class extends Component {
                 ]);
 
             $durationMs = (int) round((microtime(true) - $startTime) * 1000);
-            
+
             $responseData = $response->json();
             if ($responseData === null) {
                 $responseData = ['raw_output' => $response->body()];
@@ -140,7 +142,7 @@ new class extends Component {
 
                 $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
                 $configData = [];
-                
+
                 if (File::exists($configPath)) {
                     $configData = json_decode(File::get($configPath), true) ?? [];
                 } else {
@@ -261,13 +263,11 @@ new class extends Component {
             return;
         }
 
-        $apiKey = session('UI_TRANSLATION_HUB_API_KEY');
-        if (empty($apiKey)) {
-            $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
-            if (File::exists($configPath)) {
-                $configData = json_decode(File::get($configPath), true) ?? [];
-                $apiKey = $configData['api_key'] ?? null;
-            }
+        $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
+        $apiKey = null;
+        if (File::exists($configPath)) {
+            $configData = json_decode(File::get($configPath), true) ?? [];
+            $apiKey = $configData['api_key'] ?? null;
         }
 
         $sourceText = hex2bin($hexKey);
@@ -495,21 +495,26 @@ new class extends Component {
 
     {{-- Full-Width Top API Radar Overlay --}}
     @if ($apiDebugEnabled)
-        <div x-data="{ expanded: true }" class="fixed top-0 left-0 right-0 z-50 bg-[#010413] border-b border-[#4f46e5] shadow-2xl font-sans">
+        <div x-data="{ expanded: true }"
+            class="fixed top-0 left-0 right-0 z-50 bg-[#010413] border-b border-[#4f46e5] shadow-2xl font-sans">
 
             {{-- Header / Taskbar Bar --}}
             <div class="flex items-center justify-between px-4 py-2 bg-[#161426] border-b border-[#374151]">
                 <div class="flex items-center space-x-3">
                     <span class="w-3 h-3 rounded-full bg-[#4f46e5] animate-pulse"></span>
-                    <span class="text-xs font-black uppercase tracking-wider text-[#f8fafc]">API Radar (Dev Log & Inspect)</span>
+                    <span class="text-xs font-black uppercase tracking-wider text-[#f8fafc]">API Radar (Dev Log &
+                        Inspect)</span>
                 </div>
                 <div class="flex items-center space-x-3">
                     @if ($lastApiInspect)
-                        <span class="px-2 py-0.5 text-[10px] font-bold rounded uppercase {{ ($lastApiInspect['successful'] ?? false) ? 'bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/40' : 'bg-[#f43f5e]/20 text-[#f43f5e] border border-[#f43f5e]/40' }}">
-                            {{ ($lastApiInspect['status'] ?? 0) === 0 ? 'FAIL' : ($lastApiInspect['status'] . ' ' . (($lastApiInspect['successful'] ?? false) ? 'OK' : 'ERR')) }}
+                        <span
+                            class="px-2 py-0.5 text-[10px] font-bold rounded uppercase {{ $lastApiInspect['successful'] ?? false ? 'bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/40' : 'bg-[#f43f5e]/20 text-[#f43f5e] border border-[#f43f5e]/40' }}">
+                            {{ ($lastApiInspect['status'] ?? 0) === 0 ? 'FAIL' : $lastApiInspect['status'] . ' ' . ($lastApiInspect['successful'] ?? false ? 'OK' : 'ERR') }}
                         </span>
-                        <span class="text-xs font-mono text-[#9da4af]">{{ $lastApiInspect['duration_ms'] ?? 0 }} ms</span>
-                        <span class="text-[10px] font-mono text-[#9da4af]">{{ $lastApiInspect['timestamp'] ?? '' }}</span>
+                        <span class="text-xs font-mono text-[#9da4af]">{{ $lastApiInspect['duration_ms'] ?? 0 }}
+                            ms</span>
+                        <span
+                            class="text-[10px] font-mono text-[#9da4af]">{{ $lastApiInspect['timestamp'] ?? '' }}</span>
                     @endif
                     <button type="button" @click="expanded = !expanded"
                         class="text-xs font-bold text-[#9da4af] hover:text-white px-3 py-1 bg-[#0c0b16] border border-[#374151] rounded cursor-pointer">
@@ -520,28 +525,36 @@ new class extends Component {
             </div>
 
             {{-- Inspector Content mit vertikalem Scrollen --}}
-            <div x-show="expanded" x-transition class="p-4 space-y-4 max-h-[350px] overflow-y-auto bg-[#161426]/95 backdrop-blur-md">
+            <div x-show="expanded" x-transition
+                class="p-4 space-y-4 max-h-[350px] overflow-y-auto bg-[#161426]/95 backdrop-blur-md">
                 @if ($lastApiInspect)
                     @if (!empty($lastApiInspect['error']))
-                        <div class="p-3 bg-[#f43f5e]/10 border border-[#f43f5e]/30 rounded text-xs font-mono text-[#f43f5e]">
+                        <div
+                            class="p-3 bg-[#f43f5e]/10 border border-[#f43f5e]/30 rounded text-xs font-mono text-[#f43f5e]">
                             ⚠️ {{ $lastApiInspect['error'] }}
                         </div>
                     @endif
 
                     <div>
-                        <div class="text-[10px] font-bold uppercase tracking-wider text-[#9da4af] mb-1">&rarr; Request URL & Method</div>
-                        <div class="bg-[#0c0b16] p-3 rounded border border-[#374151] text-xs font-mono text-[#4f46e5] break-all">
-                            <span class="font-bold uppercase">[{{ $lastApiInspect['request']['method'] ?? 'POST' }}]</span> {{ $lastApiInspect['request']['url'] ?? '' }}
+                        <div class="text-[10px] font-bold uppercase tracking-wider text-[#9da4af] mb-1">&rarr; Request
+                            URL & Method</div>
+                        <div
+                            class="bg-[#0c0b16] p-3 rounded border border-[#374151] text-xs font-mono text-[#4f46e5] break-all">
+                            <span
+                                class="font-bold uppercase">[{{ $lastApiInspect['request']['method'] ?? 'POST' }}]</span>
+                            {{ $lastApiInspect['request']['url'] ?? '' }}
                         </div>
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <div class="text-[10px] font-bold uppercase tracking-wider text-[#9da4af] mb-1">&rarr; Outgoing Payload</div>
+                            <div class="text-[10px] font-bold uppercase tracking-wider text-[#9da4af] mb-1">&rarr;
+                                Outgoing Payload</div>
                             <pre class="bg-[#0c0b16] p-3 rounded border border-[#374151] text-xs font-mono text-[#f8fafc] overflow-y-auto max-h-48"><code>{{ json_encode($lastApiInspect['request']['payload'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</code></pre>
                         </div>
                         <div>
-                            <div class="text-[10px] font-bold uppercase tracking-wider text-[#9da4af] mb-1">&leftarrow; Incoming Response</div>
+                            <div class="text-[10px] font-bold uppercase tracking-wider text-[#9da4af] mb-1">&leftarrow;
+                                Incoming Response</div>
                             <pre class="bg-[#0c0b16] p-3 rounded border border-[#374151] text-xs font-mono text-[#10b981] overflow-y-auto max-h-48"><code>{{ json_encode($lastApiInspect['response'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</code></pre>
                         </div>
                     </div>
@@ -575,7 +588,7 @@ new class extends Component {
                 @if ($autoTranslateEnabled)
                     <button type="button" wire:click="translateAll" wire:loading.attr="disabled"
                         @if (empty($availableLocales)) disabled @endif
-                        class="text-[10px] font-bold px-2 py-3 rounded-sm uppercase bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        class="text-[10px] font-bold px-3 py-3 rounded-sm uppercase bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 disabled:cursor-not-allowed min-w-[170px] text-center">
                         <span wire:loading.remove wire:target="translateAll">Translate All Missing</span>
                         <span wire:loading wire:target="translateAll">Translating...</span>
                     </button>
@@ -597,7 +610,8 @@ new class extends Component {
                         <option value="">{{ __t('no Languages') }}</option>
                     @else
                         @foreach ($availableLocales as $code => $name)
-                            <option value="{{ $code }}">{{ strtoupper($code) }} - {{ __t($name) }}</option>
+                            <option value="{{ $code }}">{{ strtoupper($code) }} - {{ __t($name) }}
+                            </option>
                         @endforeach
                     @endif
                     <optgroup label="──────────────────">
@@ -619,7 +633,8 @@ new class extends Component {
                     <div
                         class="w-8 h-4 bg-[#1c1a2e] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all {{ $autoTranslateEnabled ? 'peer-checked:bg-[#10b981]' : 'bg-[#f59e0b]' }}">
                     </div>
-                    <span class="ml-2 text-[10px] font-black uppercase tracking-wider {{ $autoTranslateEnabled ? 'text-[#10b981]' : 'text-[#f59e0b]' }}">
+                    <span
+                        class="ml-2 text-[10px] font-black uppercase tracking-wider {{ $autoTranslateEnabled ? 'text-[#10b981]' : 'text-[#f59e0b]' }}">
                         {{ $autoTranslateEnabled ? 'Cloud Translation Active' : 'Cloud Translation Inactive (Setup Required)' }}
                     </span>
                 </label>
@@ -632,7 +647,8 @@ new class extends Component {
                             class="text-[#10b981] font-mono font-black ml-1">{{ $wordBalance }}</span>
                     </span>
                 @else
-                    <span class="text-[10px] italic text-[#f59e0b]">Connect your L7 Translation Hub Account to unlock Cloud Features.</span>
+                    <span class="text-[10px] italic text-[#f59e0b]">Connect your L7 Translation Hub Account to unlock
+                        Cloud Features.</span>
                 @endif
             </div>
         </div>
@@ -658,14 +674,17 @@ new class extends Component {
                                         class="flex items-center justify-center rounded-sm p-1.5 bg-[#080e20] border border-[#374151] hover:border-[#f43f5e] hover:bg-[#f43f5e]/20 text-[#9da4af] hover:text-[#f43f5e] w-8 h-8 transition-colors cursor-pointer"
                                         title="{{ __t('Delete Key') }}">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 0 1 0 0-1-1h-4a1 0 1 0 0 1 1v3M4 7h16"></path>
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 0 1 0 0-1-1h-4a1 0 1 0 0 1 1v3M4 7h16">
+                                            </path>
                                         </svg>
                                     </button>
                                 </td>
 
-                                <td
-                                    class="p-3 text-[13px] text-[#9da4af] align-top break-words select-all leading-relaxed">
-                                    {{ hex2bin($key) }}
+                                {{-- Source Spalte als Readonly-Textarea (Symmetrisch) --}}
+                                <td class="p-3 align-top">
+                                    <textarea rows="2" readonly
+                                        class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16]/60 text-[#9da4af] cursor-default focus:outline-none resize-y min-h-[42px] select-all">{{ hex2bin($key) }}</textarea>
                                 </td>
 
                                 <td class="p-3 align-top" x-data="{ dirty: false }">
