@@ -47,7 +47,7 @@ new class extends Component {
         }
 
         $this->languagesTable = config('ui-translation-hub.table_name', 'l7languages');
-        $this->baseLocaleIso = config('app.fallback_locale', 'en');
+        $this->baseLocaleIso = config('app.fallback_locale');
         $this->baseLanguageData = $this->loadIso($this->baseLocaleIso);
 
         $this->availableLocales = DB::table($this->languagesTable)->where('code', '!=', $this->baseLocaleIso)->pluck('name', 'code')->toArray();
@@ -57,7 +57,6 @@ new class extends Component {
 
         $this->apiDebugEnabled = config('ui-translation-hub.api_debug', false);
 
-
         // Direkt über die lokale config.json steuern (ohne redundante Session)
         $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
         $savedKey = null;
@@ -65,7 +64,6 @@ new class extends Component {
         if (File::exists($configPath)) {
             $configData = json_decode(File::get($configPath), true) ?? [];
             $savedKey = $configData['api_key'] ?? null;
->>>>>>> 58ba9c1218764ce750ea415d76e706750b135a37
         }
 
         if (!empty($savedKey)) {
@@ -92,9 +90,8 @@ new class extends Component {
             return;
         }
 
-        // Rein lokales Auslesen des Kontingents ohne blockierenden HTTP-Request beim Mount
         $cachedQuota = $configData['last_known_quota'] ?? 0;
-        $this->wordBalance = number_format($cachedQuota, 0, ',', '.') . ' Chars';
+        $this->wordBalance = $cachedQuota;
         $this->autoTranslateEnabled = true;
     }
     //------------------------------------------------------------------------------------------------------------
@@ -145,7 +142,6 @@ new class extends Component {
             if ($response->successful() && ($responseData['status'] ?? '') === 'success') {
                 session(['UI_TRANSLATION_HUB_API_KEY' => $this->apiKeyInput]);
 
-                // Persistente Speicherung in der lokalen config.json des User-Projekts
                 $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
                 $configData = [];
                 
@@ -158,7 +154,6 @@ new class extends Component {
                     }
                 }
 
-                // Vollständiger Key und strukturierte Server-Werte übernehmen
                 $configData['server_url'] = $this->apiUrl;
                 $configData['api_key'] = $this->apiKeyInput;
                 $configData['last_known_quota'] = $responseData['remaining_balance'] ?? 0;
@@ -172,7 +167,7 @@ new class extends Component {
                 $this->showApiKeyModal = false;
 
                 if (isset($responseData['remaining_balance'])) {
-                    $this->wordBalance = number_format($responseData['remaining_balance'], 0, ',', '.') . ' Chars';
+                    $this->wordBalance = $responseData['remaining_balance'];
                 }
             } else {
                 $this->apiErrorMessage = $responseData['message'] ?? 'The route verify-key could not be found.';
@@ -204,12 +199,10 @@ new class extends Component {
     }
     //------------------------------------------------------------------------------------------------------------
 
-    //Cloud Schalter off
     public function disableApi()
     {
         session()->forget('UI_TRANSLATION_HUB_API_KEY');
         
-        // Auch aus der lokalen config.json entfernen oder als inaktiv markieren
         $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
         if (File::exists($configPath)) {
             $configData = json_decode(File::get($configPath), true) ?? [];
@@ -224,7 +217,6 @@ new class extends Component {
     }
     //------------------------------------------------------------------------------------------------------------
 
-    //Load available languages from DB
     public function loadAvailableLocales()
     {
         $this->availableLocales = DB::table($this->languagesTable)->where('code', '!=', $this->baseLocaleIso)->pluck('name', 'code')->toArray();
@@ -237,6 +229,7 @@ new class extends Component {
         return File::exists($path) ? json_decode(File::get($path), true) : [];
     }
     //------------------------------------------------------------------------------------------------------------
+
     #[On('save-key')]
     public function handleSave($key, $val)
     {
@@ -325,9 +318,8 @@ new class extends Component {
 
                 if (isset($responseData['remaining_balance'])) {
                     $remaining = $responseData['remaining_balance'];
-                    $this->wordBalance = number_format($remaining, 0, ',', '.') . ' Chars';
+                    $this->wordBalance = $remaining;
 
-                    // Update auch in der lokalen config.json festhalten
                     $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
                     if (File::exists($configPath)) {
                         $configData = json_decode(File::get($configPath), true) ?? [];
@@ -463,7 +455,6 @@ new class extends Component {
     @if ($apiDebugEnabled)
         <div x-data="{ expanded: true }" class="fixed top-0 left-0 right-0 z-50 bg-[#010413] border-b border-[#4f46e5] shadow-2xl font-sans">
 
-            {{-- Header / Taskbar Bar --}}
             <div class="flex items-center justify-between px-4 py-2 bg-[#161426] border-b border-[#374151]">
                 <div class="flex items-center space-x-3">
                     <span class="w-3 h-3 rounded-full bg-[#4f46e5] animate-pulse"></span>
@@ -485,7 +476,6 @@ new class extends Component {
                 </div>
             </div>
 
-            {{-- Inspector Content mit vertikalem Scrollen --}}
             <div x-show="expanded" x-transition class="p-4 space-y-4 max-h-[350px] overflow-y-auto bg-[#161426]/95 backdrop-blur-md">
                 @if ($lastApiInspect)
                     @if (!empty($lastApiInspect['error']))
@@ -593,8 +583,8 @@ new class extends Component {
             <div>
                 @if ($autoTranslateEnabled)
                     <span class="text-[10px] font-bold uppercase text-[#9da4af]">
-                        Remaining Words: <span
-                            class="text-[#10b981] font-mono font-black ml-1">{{ $wordBalance }}</span>
+                        Remaining chars: <span
+                            class="text-[#10b981] font-mono font-black ml-1 text-lg">{{ $wordBalance }}</span>
                     </span>
                 @else
                     <span class="text-[10px] italic text-[#f59e0b]">Connect your L7 Translation Hub Account to unlock Cloud Features.</span>
@@ -628,28 +618,35 @@ new class extends Component {
                                     </button>
                                 </td>
 
-                                <td
-                                    class="p-3 text-[13px] text-[#9da4af] align-top break-words select-all leading-relaxed">
-                                    {{ hex2bin($key) }}
+                                <td class="p-3 align-top">
+                                    <textarea rows="2" disabled
+                                        class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#9da4af] focus:outline-none resize-y min-h-[42px] cursor-not-allowed opacity-90">{{ hex2bin($key) }}</textarea>
                                 </td>
 
-                                <td class="p-3 align-top">
+                                <td class="p-3 align-top" x-data="{ dirty: false, saved: false }">
                                     <div class="flex gap-2 items-start w-full">
-                                        <textarea id="textarea-{{ $key }}" wire:blur="saveKey('{{ $key }}',$event.target.value)"
+                                        <textarea id="textarea-{{ $key }}" 
+                                            wire:key="txt-{{ $key }}-{{ $targetLanguageData[$key] ?? 'empty' }}"
+                                            x-on:input="dirty = true; saved = false;"
                                             rows="2"
-                                            class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none resize-y min-h-[42px]">{{ hex2bin($targetLanguageData[$key] ?? '') }}</textarea>
+                                            class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none resize-y min-h-[42px]">{{ isset($targetLanguageData[$key]) ? hex2bin($targetLanguageData[$key]) : '' }}</textarea>
 
                                         <div class="flex flex-col gap-1 shrink-0">
                                             @if ($autoTranslateEnabled)
                                                 <button type="button"
                                                     wire:click="requestTranslation('{{ $key }}')"
-                                                    class="flex items-center justify-center rounded-sm p-1.5 bg-[#080e20] border border-[#374151] hover:border-[#4f46e5] w-8 h-8 transition-colors"
+                                                    class="flex items-center justify-center rounded-sm p-1.5 bg-[#080e20] border border-[#374151] hover:border-[#4f46e5] hover:bg-[#4f46e5]/20 text-[#9da4af] hover:text-[#4f46e5] w-8 h-8 transition-colors cursor-pointer"
                                                     title="Auto-Translate">🌐</button>
                                             @endif
+
                                             <button type="button"
-                                                onclick="Livewire.dispatch('save-key', { key: '{{ $key }}', val: document.getElementById('textarea-{{ $key }}').value })"
-                                                class="flex items-center justify-center rounded-sm p-1.5 bg-[#080e20] cursor-pointer border-[#374151] hover:border-[#10b981] w-8 h-8 transition-colors"
-                                                title="Save">✅</button>
+                                                wire:click="saveKey('{{ $key }}', document.getElementById('textarea-{{ $key }}').value)"
+                                                @click="dirty = false; saved = true;"
+                                                :class="dirty ? 'bg-[#080e20] border border-[#10b981] text-[#10b981] hover:bg-[#10b981]/20 hover:text-[#10b981] hover:border-[#10b981]' : (saved ? 'bg-[#10b981]/10 border border-[#10b981]/40 text-[#10b981]' : 'bg-[#080e20] border border-[#374151] text-[#9da4af] hover:border-[#10b981] hover:bg-[#10b981]/20 hover:text-[#10b981]')"
+                                                class="flex items-center justify-center rounded-sm p-1.5 w-8 h-8 transition-colors cursor-pointer shadow-sm"
+                                                title="Save">
+                                                ✓
+                                            </button>
                                         </div>
                                     </div>
                                 </td>
@@ -703,7 +700,6 @@ new class extends Component {
                         {{ __t('Gib deinen API-Key ein, um die automatische Cloud-Übersetzung zu aktivieren.') }}
                     </p>
 
-                    {{-- CTA Box für User ohne Key --}}
                     <div
                         class="mb-5 p-3 rounded-sm bg-[#080e20] border border-[#374151] flex items-center justify-between gap-3">
                         <div class="flex flex-col">
@@ -718,7 +714,6 @@ new class extends Component {
                         </a>
                     </div>
 
-                    {{-- Input Formular --}}
                     <div class="flex flex-col gap-1 mb-5">
                         <label class="text-[9px] font-bold uppercase text-[#9da4af]">{{ __t('Dein API-Key') }}</label>
                         <input type="password" wire:model="apiKeyInput" placeholder="l7_live_..."
@@ -743,5 +738,5 @@ new class extends Component {
             </div>
         @endif
 
-    </div> {{-- / Main Canvas-Dark Container --}}
+    </div>
 </div>
