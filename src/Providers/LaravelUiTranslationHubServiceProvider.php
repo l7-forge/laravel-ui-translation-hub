@@ -48,17 +48,14 @@ class LaravelUiTranslationHubServiceProvider extends ServiceProvider
         });
         // 3. Optional: Erlaube dem User, die Config zu publishen
         if ($this->app->runningInConsole()) {
-            $this->publishes([
-                dirname(__DIR__, 2) . '/config/ui-translation-hub.php' => config_path('ui-translation-hub.php'),
-            ], 'ui-translation-hub-config');
 
-            // 2. NEU: Switcher-Komponente zum Kopieren bereitstellen
+            // 1. NEU: Switcher-Komponente zum Kopieren bereitstellen
             $this->publishes([
                 dirname(__DIR__, 2) . '/resources/views/livewire/l7-language-switcher.blade.php'
                 => resource_path('views/livewire/l7-language-switcher.blade.php'),
             ], 'l7-language-switcher');
 
-            // 3. Translation-Hub Dashboard Komponente
+            // 2. Translation-Hub Dashboard Komponente
             $this->publishes([
                 dirname(__DIR__, 2) . '/resources/views/livewire/l7-translator-dashboard.blade.php'
                 => resource_path('views/livewire/l7-translator-dashboard.blade.php'),

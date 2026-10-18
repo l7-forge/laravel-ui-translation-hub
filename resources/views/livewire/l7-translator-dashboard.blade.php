@@ -35,18 +35,63 @@ new class extends Component {
     public $apiDebugEnabled = false;
     public $lastApiInspect = null;
 
+    protected function getConfigPath()
+    {
+        return lang_path('hub-config.json');
+    }
+
+    protected function ensureConfigExists()
+    {
+        $path = $this->getConfigPath();
+        if (!File::exists($path)) {
+            $dir = dirname($path);
+            if (!is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
+
+            $defaultConfig = [
+                'table_name' => 'l7languages',
+                'api_url' => 'http://l7-translation-api-server.test/api/v1',
+                'api_debug' => false,
+                'api_key' => '',
+                'last_known_quota' => 0,
+                'status' => 'inactive',
+            ];
+
+            File::put($path, json_encode($defaultConfig, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        }
+    }
+
+    protected function readHubConfig()
+    {
+        $this->ensureConfigExists();
+        $path = $this->getConfigPath();
+        return json_decode(File::get($path), true) ?? [];
+    }
+
+    protected function writeHubConfig(array $data)
+    {
+        $path = $this->getConfigPath();
+        $dir = dirname($path);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+        File::put($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+    }
+
     //------------------------------------------------------------------------------------------------------------
 
     public function mount()
     {
-        $this->apiUrl = config('ui-translation-hub.api_url');
+        $configData = $this->readHubConfig();
 
-        // Fail fast, falls keine API-URL konfiguriert ist
+        $this->apiUrl = $configData['api_url'];
+
         if (blank($this->apiUrl)) {
-            throw new \RuntimeException('Translation Hub Fehler: "ui-translation-hub.api_url" ist nicht konfiguriert. Bitte prüfe deine .env und Config.');
+            throw new \RuntimeException('Translation Hub Fehler: "api_url" ist nicht konfiguriert. Bitte prüfe deine hub-config.json.');
         }
 
-        $this->languagesTable = config('ui-translation-hub.table_name', 'l7languages');
+        $this->languagesTable = $configData['table_name'];
         $this->baseLocaleIso = config('app.fallback_locale');
         $this->baseLanguageData = $this->loadIso($this->baseLocaleIso);
 
@@ -55,16 +100,9 @@ new class extends Component {
         $this->targetLocaleIso = !empty($this->availableLocales) ? array_key_first($this->availableLocales) : null;
         $this->targetLanguageData = $this->targetLocaleIso ? $this->loadIso($this->targetLocaleIso) : [];
 
-        $this->apiDebugEnabled = config('ui-translation-hub.api_debug', false);
+        $this->apiDebugEnabled = $configData['api_debug'];
 
-        // Direkt über die lokale config.json steuern (ohne redundante Session)
-        $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
-        $savedKey = null;
-
-        if (File::exists($configPath)) {
-            $configData = json_decode(File::get($configPath), true) ?? [];
-            $savedKey = $configData['api_key'] ?? null;
-        }
+        $savedKey = $configData['api_key'];
 
         if (!empty($savedKey)) {
             $this->apiKeyInput = $savedKey;
@@ -76,21 +114,15 @@ new class extends Component {
 
     public function checkApiBalance()
     {
-        $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
-
-        if (!File::exists($configPath)) {
-            return;
-        }
-
-        $configData = json_decode(File::get($configPath), true);
-        $savedKey = $configData['api_key'] ?? null;
+        $configData = $this->readHubConfig();
+        $savedKey = $configData['api_key'];
 
         if (empty($savedKey)) {
             $this->disableApi();
             return;
         }
 
-        $cachedQuota = $configData['last_known_quota'] ?? 0;
+        $cachedQuota = $configData['last_known_quota'];
         $this->wordBalance = $cachedQuota;
         $this->autoTranslateEnabled = true;
     }
@@ -142,18 +174,7 @@ new class extends Component {
             if ($response->successful() && ($responseData['status'] ?? '') === 'success') {
                 session(['UI_TRANSLATION_HUB_API_KEY' => $this->apiKeyInput]);
 
-                $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
-                $configData = [];
-                
-                if (File::exists($configPath)) {
-                    $configData = json_decode(File::get($configPath), true) ?? [];
-                } else {
-                    $dir = dirname($configPath);
-                    if (!is_dir($dir)) {
-                        mkdir($dir, 0755, true);
-                    }
-                }
-
+                $configData = $this->readHubConfig();
                 $configData['server_url'] = $this->apiUrl;
                 $configData['api_key'] = $this->apiKeyInput;
                 $configData['last_known_quota'] = $responseData['remaining_balance'] ?? 0;
@@ -161,7 +182,7 @@ new class extends Component {
                 $configData['last_checked_at'] = now()->toDateTimeString();
                 $configData['status'] = 'active';
 
-                File::put($configPath, json_encode($configData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+                $this->writeHubConfig($configData);
 
                 $this->autoTranslateEnabled = true;
                 $this->showApiKeyModal = false;
@@ -203,13 +224,10 @@ new class extends Component {
     {
         session()->forget('UI_TRANSLATION_HUB_API_KEY');
         
-        $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
-        if (File::exists($configPath)) {
-            $configData = json_decode(File::get($configPath), true) ?? [];
-            $configData['api_key'] = '';
-            $configData['status'] = 'inactive';
-            File::put($configPath, json_encode($configData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-        }
+        $configData = $this->readHubConfig();
+        $configData['api_key'] = '';
+        $configData['status'] = 'inactive';
+        $this->writeHubConfig($configData);
 
         $this->autoTranslateEnabled = false;
         $this->wordBalance = '---';
@@ -268,11 +286,8 @@ new class extends Component {
 
         $apiKey = session('UI_TRANSLATION_HUB_API_KEY');
         if (empty($apiKey)) {
-            $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
-            if (File::exists($configPath)) {
-                $configData = json_decode(File::get($configPath), true) ?? [];
-                $apiKey = $configData['api_key'] ?? null;
-            }
+            $configData = $this->readHubConfig();
+            $apiKey = $configData['api_key'];
         }
 
         $payloadData = [
@@ -314,25 +329,26 @@ new class extends Component {
             }
 
             if ($response->successful() && isset($responseData['translation_hex'])) {
-                $this->targetLanguageData[$hexKey] = $responseData['translation_hex'];
+                $hexResult = $responseData['translation_hex'];
+                $plainResult = hex2bin($hexResult);
 
-                if (isset($responseData['remaining_balance'])) {
-                    $remaining = $responseData['remaining_balance'];
+                $this->targetLanguageData[$hexKey] = $hexResult;
+                $this->persistData();
+
+                $remaining = $responseData['remaining_balance'] ?? null;
+                if ($remaining !== null) {
                     $this->wordBalance = $remaining;
-
-                    $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
-                    if (File::exists($configPath)) {
-                        $configData = json_decode(File::get($configPath), true) ?? [];
-                        $configData['last_known_quota'] = $remaining;
-                        File::put($configPath, json_encode($configData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-                    }
+                    
+                    $configData = $this->readHubConfig();
+                    $configData['last_known_quota'] = $remaining;
+                    $this->writeHubConfig($configData);
 
                     if ($remaining <= 0) {
                         $this->disableApi();
                     }
                 }
 
-                $this->persistData();
+                $this->dispatch('translation-received', key: $hexKey, translation: $plainResult, balance: $remaining);
             }
         } catch (\Throwable $e) {
             $durationMs = (int) round((microtime(true) - $startTime) * 1000);
@@ -375,7 +391,6 @@ new class extends Component {
                 $this->requestTranslation($hexKey);
             }
         }
-        $this->persistData();
     }
     //------------------------------------------------------------------------------------------------------------
 
@@ -428,7 +443,7 @@ new class extends Component {
 
         $files = File::files($langPath);
         foreach ($files as $file) {
-            if ($file->getExtension() === 'json') {
+            if ($file->getExtension() === 'json' && $file->getFilename() !== 'hub-config.json') {
                 $locale = $file->getFilenameWithoutExtension();
                 $path = $file->getPathname();
 
@@ -450,7 +465,7 @@ new class extends Component {
 };
 ?>
 
-<div class="relative">
+<div class="relative" x-data="{ balance: '{{ $wordBalance }}' }" @translation-received.window="if ($event.detail.balance !== undefined) { balance = $event.detail.balance; }">
     {{-- Full-Width Top API Radar Overlay --}}
     @if ($apiDebugEnabled)
         <div x-data="{ expanded: true }" class="fixed top-0 left-0 right-0 z-50 bg-[#010413] border-b border-[#4f46e5] shadow-2xl font-sans">
@@ -584,7 +599,7 @@ new class extends Component {
                 @if ($autoTranslateEnabled)
                     <span class="text-[10px] font-bold uppercase text-[#9da4af]">
                         Remaining chars: <span
-                            class="text-[#10b981] font-mono font-black ml-1 text-lg">{{ $wordBalance }}</span>
+                            class="text-[#10b981] font-mono font-black ml-1 text-lg" x-text="balance"></span>
                     </span>
                 @else
                     <span class="text-[10px] italic text-[#f59e0b]">Connect your L7 Translation Hub Account to unlock Cloud Features.</span>
@@ -623,13 +638,20 @@ new class extends Component {
                                         class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#9da4af] focus:outline-none resize-y min-h-[42px] cursor-not-allowed opacity-90">{{ hex2bin($key) }}</textarea>
                                 </td>
 
-                                <td class="p-3 align-top" x-data="{ dirty: false, saved: false }">
+                                <td class="p-3 align-top" 
+                                    x-data="{ 
+                                        dirty: false, 
+                                        saved: false,
+                                        text: '{{ isset($targetLanguageData[$key]) ? addslashes(hex2bin($targetLanguageData[$key])) : '' }}'
+                                    }"
+                                    @translation-received.window="if ($event.detail.key === '{{ $key }}') { text = $event.detail.translation; saved = true; dirty = false; }">
                                     <div class="flex gap-2 items-start w-full">
                                         <textarea id="textarea-{{ $key }}" 
-                                            wire:key="txt-{{ $key }}-{{ $targetLanguageData[$key] ?? 'empty' }}"
+                                            wire:key="textarea-{{ $key }}"
+                                            x-model="text"
                                             x-on:input="dirty = true; saved = false;"
                                             rows="2"
-                                            class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none resize-y min-h-[42px]">{{ isset($targetLanguageData[$key]) ? hex2bin($targetLanguageData[$key]) : '' }}</textarea>
+                                            class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none resize-y min-h-[42px]"></textarea>
 
                                         <div class="flex flex-col gap-1 shrink-0">
                                             @if ($autoTranslateEnabled)
@@ -640,7 +662,7 @@ new class extends Component {
                                             @endif
 
                                             <button type="button"
-                                                wire:click="saveKey('{{ $key }}', document.getElementById('textarea-{{ $key }}').value)"
+                                                wire:click="saveKey('{{ $key }}', text)"
                                                 @click="dirty = false; saved = true;"
                                                 :class="dirty ? 'bg-[#080e20] border border-[#10b981] text-[#10b981] hover:bg-[#10b981]/20 hover:text-[#10b981] hover:border-[#10b981]' : (saved ? 'bg-[#10b981]/10 border border-[#10b981]/40 text-[#10b981]' : 'bg-[#080e20] border border-[#374151] text-[#9da4af] hover:border-[#10b981] hover:bg-[#10b981]/20 hover:text-[#10b981]')"
                                                 class="flex items-center justify-center rounded-sm p-1.5 w-8 h-8 transition-colors cursor-pointer shadow-sm"
