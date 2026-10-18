@@ -39,7 +39,9 @@ new class extends Component {
 
     public function mount()
     {
-        $this->apiUrl = config('UI_TRANSLATION_HUB_API_URL','');
+        $this->apiUrl = config('ui-translation-hub.api_url');
+
+        // Fail fast, falls keine API-URL konfiguriert ist
         if (blank($this->apiUrl)) {
             throw new \RuntimeException('Translation Hub Fehler: "ui-translation-hub.api_url" ist nicht konfiguriert. Bitte prüfe deine .env und Config.');
         }
@@ -55,19 +57,21 @@ new class extends Component {
 
         $this->apiDebugEnabled = config('ui-translation-hub.api_debug', false);
 
-        $savedKey = null;
+
+        // Direkt über die lokale config.json steuern (ohne redundante Session)
         $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
+        $savedKey = null;
+
         if (File::exists($configPath)) {
             $configData = json_decode(File::get($configPath), true) ?? [];
             $savedKey = $configData['api_key'] ?? null;
+>>>>>>> 58ba9c1218764ce750ea415d76e706750b135a37
         }
 
         if (!empty($savedKey)) {
             $this->apiKeyInput = $savedKey;
             $this->autoTranslateEnabled = true;
             $this->checkApiBalance();
-        } else {
-            $this->disableApi();
         }
     }
     //------------------------------------------------------------------------------------------------------------
@@ -88,8 +92,9 @@ new class extends Component {
             return;
         }
 
+        // Rein lokales Auslesen des Kontingents ohne blockierenden HTTP-Request beim Mount
         $cachedQuota = $configData['last_known_quota'] ?? 0;
-        $this->wordBalance = number_format($cachedQuota, 0, ',', '.') . __t('Chars');
+        $this->wordBalance = number_format($cachedQuota, 0, ',', '.') . ' Chars';
         $this->autoTranslateEnabled = true;
     }
     //------------------------------------------------------------------------------------------------------------
@@ -115,7 +120,7 @@ new class extends Component {
                 ]);
 
             $durationMs = (int) round((microtime(true) - $startTime) * 1000);
-
+            
             $responseData = $response->json();
             if ($responseData === null) {
                 $responseData = ['raw_output' => $response->body()];
@@ -130,7 +135,7 @@ new class extends Component {
                     'request' => [
                         'method' => 'POST',
                         'url' => $fullEndpoint,
-                        'payload' => ['api_key' => $this->apiKeyInput],
+                        'payload' => ['api_key' => substr($this->apiKeyInput, 0, 6) . '...***'],
                     ],
                     'response' => $responseData,
                     'error' => $response->failed() ? "HTTP Error {$response->status()}" : null,
@@ -140,9 +145,10 @@ new class extends Component {
             if ($response->successful() && ($responseData['status'] ?? '') === 'success') {
                 session(['UI_TRANSLATION_HUB_API_KEY' => $this->apiKeyInput]);
 
+                // Persistente Speicherung in der lokalen config.json des User-Projekts
                 $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
                 $configData = [];
-
+                
                 if (File::exists($configPath)) {
                     $configData = json_decode(File::get($configPath), true) ?? [];
                 } else {
@@ -152,6 +158,7 @@ new class extends Component {
                     }
                 }
 
+                // Vollständiger Key und strukturierte Server-Werte übernehmen
                 $configData['server_url'] = $this->apiUrl;
                 $configData['api_key'] = $this->apiKeyInput;
                 $configData['last_known_quota'] = $responseData['remaining_balance'] ?? 0;
@@ -182,7 +189,7 @@ new class extends Component {
                     'request' => [
                         'method' => 'POST',
                         'url' => $fullEndpoint,
-                        'payload' => ['api_key' => $this->apiKeyInput],
+                        'payload' => ['api_key' => substr($this->apiKeyInput, 0, 6) . '...***'],
                     ],
                     'response' => [
                         'exception' => get_class($e),
@@ -197,10 +204,12 @@ new class extends Component {
     }
     //------------------------------------------------------------------------------------------------------------
 
+    //Cloud Schalter off
     public function disableApi()
     {
         session()->forget('UI_TRANSLATION_HUB_API_KEY');
         
+        // Auch aus der lokalen config.json entfernen oder als inaktiv markieren
         $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
         if (File::exists($configPath)) {
             $configData = json_decode(File::get($configPath), true) ?? [];
@@ -215,6 +224,7 @@ new class extends Component {
     }
     //------------------------------------------------------------------------------------------------------------
 
+    //Load available languages from DB
     public function loadAvailableLocales()
     {
         $this->availableLocales = DB::table($this->languagesTable)->where('code', '!=', $this->baseLocaleIso)->pluck('name', 'code')->toArray();
@@ -263,134 +273,91 @@ new class extends Component {
             return;
         }
 
-        $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
-        $apiKey = null;
-        if (File::exists($configPath)) {
-            $configData = json_decode(File::get($configPath), true) ?? [];
-            $apiKey = $configData['api_key'] ?? null;
-        }
-
-        $sourceText = hex2bin($hexKey);
-        $startTime = microtime(true);
-        $translatedText = null;
-        $apiError = null;
-
-        $googleUrl = 'https://translate.googleapis.com/translate_a/single?client=gtx&dt=t'
-            .'&sl='.urlencode($this->baseLocaleIso)
-            .'&tl='.urlencode($this->targetLocaleIso)
-            .'&q='.urlencode($sourceText);
-
-        try {
-            $response = Http::withoutVerifying()
-                ->withHeaders([
-                    'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                    'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                    'Accept-Language' => 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7',
-                    'Cache-Control' => 'no-cache',
-                    'Pragma' => 'no-cache',
-                ])
-                ->timeout(3)
-                ->get($googleUrl);
-
-            if ($response->successful()) {
-                $json = $response->json();
-                if (isset($json[0]) && is_array($json[0])) {
-                    $segmentText = '';
-                    foreach ($json[0] as $segment) {
-                        if (isset($segment[0])) {
-                            $segmentText .= $segment[0];
-                        }
-                    }
-                    if (!empty($segmentText)) {
-                        $translatedText = $segmentText;
-                    }
-                }
-            }
-        } catch (\Throwable $e) {
-            // Fallback greift
-        }
-
-        if (empty($translatedText)) {
-            try {
-                $fallbackUrl = 'https://api.mymemory.translated.net/get?q=' . urlencode($sourceText) . '&langpair=' . $this->baseLocaleIso . '|' . $this->targetLocaleIso;
-                $fallbackResponse = Http::withoutVerifying()->timeout(5)->get($fallbackUrl);
-
-                if ($fallbackResponse->successful()) {
-                    $data = $fallbackResponse->json();
-                    if (isset($data['responseData']['translatedText'])) {
-                        $translatedText = $data['responseData']['translatedText'];
-                    }
-                }
-            } catch (\Throwable $e) {
-                $apiError = $e->getMessage();
-            }
-        }
-
-        $durationMs = (int) round((microtime(true) - $startTime) * 1000);
-
-        if (!empty($translatedText)) {
-            $translationHex = bin2hex($translatedText);
-            $this->targetLanguageData[$hexKey] = $translationHex;
-
-            $responseData = [
-                'status' => 'success',
-                'cached' => false,
-                'translation_hex' => $translationHex,
-                'chars_used' => mb_strlen($sourceText),
-                'remaining_balance' => 49990
-            ];
-
-            if ($this->apiDebugEnabled) {
-                $this->lastApiInspect = [
-                    'timestamp' => now()->format('H:i:s.v'),
-                    'status' => 200,
-                    'successful' => true,
-                    'duration_ms' => $durationMs,
-                    'request' => [
-                        'method' => 'POST',
-                        'url' => rtrim($this->apiUrl, '/') . '/translate',
-                        'payload' => [
-                            'api_key' => $apiKey,
-                            'from_code' => $this->baseLocaleIso,
-                            'to_code' => $this->targetLocaleIso,
-                            'source_hex' => $hexKey,
-                        ],
-                    ],
-                    'response' => $responseData,
-                    'error' => null,
-                ];
-            }
-
+        $apiKey = session('UI_TRANSLATION_HUB_API_KEY');
+        if (empty($apiKey)) {
             $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
             if (File::exists($configPath)) {
                 $configData = json_decode(File::get($configPath), true) ?? [];
-                $remaining = ($configData['last_known_quota'] ?? 50000) - mb_strlen($sourceText);
-                $configData['last_known_quota'] = max(0, $remaining);
-                File::put($configPath, json_encode($configData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-                
-                $this->wordBalance = number_format($remaining, 0, ',', '.') . ' Chars';
+                $apiKey = $configData['api_key'] ?? null;
             }
+        }
 
-            $this->persistData();
-        } else {
+        $payloadData = [
+            'api_key' => $apiKey,
+            'from_code' => $this->baseLocaleIso,
+            'to_code' => $this->targetLocaleIso,
+            'source_hex' => $hexKey,
+        ];
+
+        $startTime = microtime(true);
+        $fullEndpoint = rtrim($this->apiUrl, '/') . '/translate';
+
+        try {
+            $response = Http::timeout(10)->acceptJson()->asJson()->post($fullEndpoint, $payloadData);
+
+            $durationMs = (int) round((microtime(true) - $startTime) * 1000);
+            $httpCode = $response->status();
+            $responseData = $response->json() ?? ['raw' => $response->body()];
+
             if ($this->apiDebugEnabled) {
+                $maskedPayload = $payloadData;
+                if (isset($maskedPayload['api_key'])) {
+                    $maskedPayload['api_key'] = substr($maskedPayload['api_key'], 0, 6) . '...***';
+                }
+
                 $this->lastApiInspect = [
                     'timestamp' => now()->format('H:i:s.v'),
-                    'status' => 500,
+                    'status' => $httpCode,
+                    'successful' => $response->successful(),
+                    'duration_ms' => $durationMs,
+                    'request' => [
+                        'method' => 'POST',
+                        'url' => $fullEndpoint,
+                        'payload' => $maskedPayload,
+                    ],
+                    'response' => $responseData,
+                    'error' => $response->failed() ? "HTTP Error {$httpCode}" : null,
+                ];
+            }
+
+            if ($response->successful() && isset($responseData['translation_hex'])) {
+                $this->targetLanguageData[$hexKey] = $responseData['translation_hex'];
+
+                if (isset($responseData['remaining_balance'])) {
+                    $remaining = $responseData['remaining_balance'];
+                    $this->wordBalance = number_format($remaining, 0, ',', '.') . ' Chars';
+
+                    // Update auch in der lokalen config.json festhalten
+                    $configPath = resource_path('views/vendor/laravel-ui-translation-hub/config.json');
+                    if (File::exists($configPath)) {
+                        $configData = json_decode(File::get($configPath), true) ?? [];
+                        $configData['last_known_quota'] = $remaining;
+                        File::put($configPath, json_encode($configData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+                    }
+
+                    if ($remaining <= 0) {
+                        $this->disableApi();
+                    }
+                }
+
+                $this->persistData();
+            }
+        } catch (\Throwable $e) {
+            $durationMs = (int) round((microtime(true) - $startTime) * 1000);
+
+            if ($this->apiDebugEnabled) {
+                $this->lastApiInspect = [
+                    'timestamp' => now()->format('H:i:s'),
+                    'status' => 0,
                     'successful' => false,
                     'duration_ms' => $durationMs,
                     'request' => [
                         'method' => 'POST',
-                        'url' => rtrim($this->apiUrl, '/') . '/translate',
-                        'payload' => [
-                            'api_key' => $apiKey,
-                            'from_code' => $this->baseLocaleIso,
-                            'to_code' => $this->targetLocaleIso,
-                            'source_hex' => $hexKey,
-                        ],
+                        'url' => $fullEndpoint,
+                        'payload' => $payloadData,
                     ],
-                    'response' => ['error' => 'Übersetzung fehlgeschlagen'],
-                    'error' => $apiError ?? 'Google & Fallback API nicht erreichbar.',
+                    'response' => null,
+                    'error' => $e->getMessage(),
                 ];
             }
         }
@@ -492,29 +459,23 @@ new class extends Component {
 ?>
 
 <div class="relative">
-
     {{-- Full-Width Top API Radar Overlay --}}
     @if ($apiDebugEnabled)
-        <div x-data="{ expanded: true }"
-            class="fixed top-0 left-0 right-0 z-50 bg-[#010413] border-b border-[#4f46e5] shadow-2xl font-sans">
+        <div x-data="{ expanded: true }" class="fixed top-0 left-0 right-0 z-50 bg-[#010413] border-b border-[#4f46e5] shadow-2xl font-sans">
 
             {{-- Header / Taskbar Bar --}}
             <div class="flex items-center justify-between px-4 py-2 bg-[#161426] border-b border-[#374151]">
                 <div class="flex items-center space-x-3">
                     <span class="w-3 h-3 rounded-full bg-[#4f46e5] animate-pulse"></span>
-                    <span class="text-xs font-black uppercase tracking-wider text-[#f8fafc]">API Radar (Dev Log &
-                        Inspect)</span>
+                    <span class="text-xs font-black uppercase tracking-wider text-[#f8fafc]">API Radar (Dev Log & Inspect)</span>
                 </div>
                 <div class="flex items-center space-x-3">
                     @if ($lastApiInspect)
-                        <span
-                            class="px-2 py-0.5 text-[10px] font-bold rounded uppercase {{ $lastApiInspect['successful'] ?? false ? 'bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/40' : 'bg-[#f43f5e]/20 text-[#f43f5e] border border-[#f43f5e]/40' }}">
-                            {{ ($lastApiInspect['status'] ?? 0) === 0 ? 'FAIL' : $lastApiInspect['status'] . ' ' . ($lastApiInspect['successful'] ?? false ? 'OK' : 'ERR') }}
+                        <span class="px-2 py-0.5 text-[10px] font-bold rounded uppercase {{ ($lastApiInspect['successful'] ?? false) ? 'bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/40' : 'bg-[#f43f5e]/20 text-[#f43f5e] border border-[#f43f5e]/40' }}">
+                            {{ ($lastApiInspect['status'] ?? 0) === 0 ? 'FAIL' : ($lastApiInspect['status'] . ' ' . (($lastApiInspect['successful'] ?? false) ? 'OK' : 'ERR')) }}
                         </span>
-                        <span class="text-xs font-mono text-[#9da4af]">{{ $lastApiInspect['duration_ms'] ?? 0 }}
-                            ms</span>
-                        <span
-                            class="text-[10px] font-mono text-[#9da4af]">{{ $lastApiInspect['timestamp'] ?? '' }}</span>
+                        <span class="text-xs font-mono text-[#9da4af]">{{ $lastApiInspect['duration_ms'] ?? 0 }} ms</span>
+                        <span class="text-[10px] font-mono text-[#9da4af]">{{ $lastApiInspect['timestamp'] ?? '' }}</span>
                     @endif
                     <button type="button" @click="expanded = !expanded"
                         class="text-xs font-bold text-[#9da4af] hover:text-white px-3 py-1 bg-[#0c0b16] border border-[#374151] rounded cursor-pointer">
@@ -525,36 +486,28 @@ new class extends Component {
             </div>
 
             {{-- Inspector Content mit vertikalem Scrollen --}}
-            <div x-show="expanded" x-transition
-                class="p-4 space-y-4 max-h-[350px] overflow-y-auto bg-[#161426]/95 backdrop-blur-md">
+            <div x-show="expanded" x-transition class="p-4 space-y-4 max-h-[350px] overflow-y-auto bg-[#161426]/95 backdrop-blur-md">
                 @if ($lastApiInspect)
                     @if (!empty($lastApiInspect['error']))
-                        <div
-                            class="p-3 bg-[#f43f5e]/10 border border-[#f43f5e]/30 rounded text-xs font-mono text-[#f43f5e]">
+                        <div class="p-3 bg-[#f43f5e]/10 border border-[#f43f5e]/30 rounded text-xs font-mono text-[#f43f5e]">
                             ⚠️ {{ $lastApiInspect['error'] }}
                         </div>
                     @endif
 
                     <div>
-                        <div class="text-[10px] font-bold uppercase tracking-wider text-[#9da4af] mb-1">&rarr; Request
-                            URL & Method</div>
-                        <div
-                            class="bg-[#0c0b16] p-3 rounded border border-[#374151] text-xs font-mono text-[#4f46e5] break-all">
-                            <span
-                                class="font-bold uppercase">[{{ $lastApiInspect['request']['method'] ?? 'POST' }}]</span>
-                            {{ $lastApiInspect['request']['url'] ?? '' }}
+                        <div class="text-[10px] font-bold uppercase tracking-wider text-[#9da4af] mb-1">&rarr; Request URL & Method</div>
+                        <div class="bg-[#0c0b16] p-3 rounded border border-[#374151] text-xs font-mono text-[#4f46e5] break-all">
+                            <span class="font-bold uppercase">[{{ $lastApiInspect['request']['method'] ?? 'POST' }}]</span> {{ $lastApiInspect['request']['url'] ?? '' }}
                         </div>
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <div class="text-[10px] font-bold uppercase tracking-wider text-[#9da4af] mb-1">&rarr;
-                                Outgoing Payload</div>
+                            <div class="text-[10px] font-bold uppercase tracking-wider text-[#9da4af] mb-1">&rarr; Outgoing Payload</div>
                             <pre class="bg-[#0c0b16] p-3 rounded border border-[#374151] text-xs font-mono text-[#f8fafc] overflow-y-auto max-h-48"><code>{{ json_encode($lastApiInspect['request']['payload'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</code></pre>
                         </div>
                         <div>
-                            <div class="text-[10px] font-bold uppercase tracking-wider text-[#9da4af] mb-1">&leftarrow;
-                                Incoming Response</div>
+                            <div class="text-[10px] font-bold uppercase tracking-wider text-[#9da4af] mb-1">&leftarrow; Incoming Response</div>
                             <pre class="bg-[#0c0b16] p-3 rounded border border-[#374151] text-xs font-mono text-[#10b981] overflow-y-auto max-h-48"><code>{{ json_encode($lastApiInspect['response'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</code></pre>
                         </div>
                     </div>
@@ -588,20 +541,19 @@ new class extends Component {
                 @if ($autoTranslateEnabled)
                     <button type="button" wire:click="translateAll" wire:loading.attr="disabled"
                         @if (empty($availableLocales)) disabled @endif
-                        class="text-[10px] font-bold px-3 py-3 rounded-sm uppercase bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 disabled:cursor-not-allowed min-w-[170px] text-center">
+                        class="text-[10px] font-bold px-2 py-3 rounded-sm uppercase bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                         <span wire:loading.remove wire:target="translateAll">Translate All Missing</span>
                         <span wire:loading wire:target="translateAll">Translating...</span>
                     </button>
                 @endif
 
-                <!-- filter -->
                 <select wire:model.live="filter"
                     class="px-3 py-1.5 rounded-sm text-[10px] font-bold uppercase bg-[#0c0b16] border border-[#374151] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none cursor-pointer">
                     <option value="all">{{ __t('Show All') }}</option>
                     <option value="missing">{{ __t('Missing Only') }}</option>
                 </select>
             </div>
-            <!-- Language Dropdown -->
+
             <div class="flex items-center gap-2">
                 <span class="text-[10px] font-bold uppercase text-[#9da4af]">Target:</span>
                 <select wire:model.live="targetLocaleIso"
@@ -610,8 +562,7 @@ new class extends Component {
                         <option value="">{{ __t('no Languages') }}</option>
                     @else
                         @foreach ($availableLocales as $code => $name)
-                            <option value="{{ $code }}">{{ strtoupper($code) }} - {{ __t($name) }}
-                            </option>
+                            <option value="{{ $code }}">{{ strtoupper($code) }} - {{ __t($name) }}</option>
                         @endforeach
                     @endif
                     <optgroup label="──────────────────">
@@ -633,8 +584,7 @@ new class extends Component {
                     <div
                         class="w-8 h-4 bg-[#1c1a2e] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all {{ $autoTranslateEnabled ? 'peer-checked:bg-[#10b981]' : 'bg-[#f59e0b]' }}">
                     </div>
-                    <span
-                        class="ml-2 text-[10px] font-black uppercase tracking-wider {{ $autoTranslateEnabled ? 'text-[#10b981]' : 'text-[#f59e0b]' }}">
+                    <span class="ml-2 text-[10px] font-black uppercase tracking-wider {{ $autoTranslateEnabled ? 'text-[#10b981]' : 'text-[#f59e0b]' }}">
                         {{ $autoTranslateEnabled ? 'Cloud Translation Active' : 'Cloud Translation Inactive (Setup Required)' }}
                     </span>
                 </label>
@@ -647,8 +597,7 @@ new class extends Component {
                             class="text-[#10b981] font-mono font-black ml-1">{{ $wordBalance }}</span>
                     </span>
                 @else
-                    <span class="text-[10px] italic text-[#f59e0b]">Connect your L7 Translation Hub Account to unlock
-                        Cloud Features.</span>
+                    <span class="text-[10px] italic text-[#f59e0b]">Connect your L7 Translation Hub Account to unlock Cloud Features.</span>
                 @endif
             </div>
         </div>
@@ -674,46 +623,36 @@ new class extends Component {
                                         class="flex items-center justify-center rounded-sm p-1.5 bg-[#080e20] border border-[#374151] hover:border-[#f43f5e] hover:bg-[#f43f5e]/20 text-[#9da4af] hover:text-[#f43f5e] w-8 h-8 transition-colors cursor-pointer"
                                         title="{{ __t('Delete Key') }}">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 0 1 0 0-1-1h-4a1 0 1 0 0 1 1v3M4 7h16">
-                                            </path>
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 0 1 0 0-1-1h-4a1 0 1 0 0 1 1v3M4 7h16"></path>
                                         </svg>
                                     </button>
                                 </td>
 
-                                {{-- Source Spalte als Readonly-Textarea (Symmetrisch) --}}
-                                <td class="p-3 align-top">
-                                    <textarea rows="2" readonly
-                                        class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16]/60 text-[#9da4af] cursor-default focus:outline-none resize-y min-h-[42px] select-all">{{ hex2bin($key) }}</textarea>
+                                <td
+                                    class="p-3 text-[13px] text-[#9da4af] align-top break-words select-all leading-relaxed">
+                                    {{ hex2bin($key) }}
                                 </td>
 
-                                <td class="p-3 align-top" x-data="{ dirty: false }">
-    <div class="flex gap-2 items-start w-full">
-        <textarea id="textarea-{{ $key }}" 
-            wire:key="txt-{{ $key }}-{{ $targetLanguageData[$key] ?? 'empty' }}"
-            x-on:input="dirty = true;"
-            rows="2"
-            class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none resize-y min-h-[42px]">{{ isset($targetLanguageData[$key]) ? hex2bin($targetLanguageData[$key]) : '' }}</textarea>
+                                <td class="p-3 align-top">
+                                    <div class="flex gap-2 items-start w-full">
+                                        <textarea id="textarea-{{ $key }}" wire:blur="saveKey('{{ $key }}',$event.target.value)"
+                                            rows="2"
+                                            class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none resize-y min-h-[42px]">{{ hex2bin($targetLanguageData[$key] ?? '') }}</textarea>
 
-            <div class="flex flex-col gap-1 shrink-0">
-                @if ($autoTranslateEnabled)
-                    <button type="button"
-                        wire:click="requestTranslation('{{ $key }}')"
-                        class="flex items-center justify-center rounded-sm p-1.5 bg-[#080e20] border border-[#374151] hover:border-[#4f46e5] w-8 h-8 transition-colors cursor-pointer"
-                        title="Auto-Translate">🌐</button>
-                @endif
-
-                <button type="button"
-                    wire:click="saveKey('{{ $key }}', document.getElementById('textarea-{{ $key }}').value)"
-                    @click="dirty = false;"
-                    :class="dirty ? 'bg-[#10b981] text-[#080e20] border-[#10b981] font-bold' : 'bg-[#080e20] text-[#9da4af] border-[#374151] hover:border-[#10b981]'"
-                    class="flex items-center justify-center rounded-sm p-1.5 border w-8 h-8 transition-colors cursor-pointer shadow-sm"
-                    title="Save">
-                    ✓
-                </button>
-            </div>
-    </div>
-</td>
+                                        <div class="flex flex-col gap-1 shrink-0">
+                                            @if ($autoTranslateEnabled)
+                                                <button type="button"
+                                                    wire:click="requestTranslation('{{ $key }}')"
+                                                    class="flex items-center justify-center rounded-sm p-1.5 bg-[#080e20] border border-[#374151] hover:border-[#4f46e5] w-8 h-8 transition-colors"
+                                                    title="Auto-Translate">🌐</button>
+                                            @endif
+                                            <button type="button"
+                                                onclick="Livewire.dispatch('save-key', { key: '{{ $key }}', val: document.getElementById('textarea-{{ $key }}').value })"
+                                                class="flex items-center justify-center rounded-sm p-1.5 bg-[#080e20] cursor-pointer border-[#374151] hover:border-[#10b981] w-8 h-8 transition-colors"
+                                                title="Save">✅</button>
+                                        </div>
+                                    </div>
+                                </td>
                             </tr>
                         @endif
                     @endforeach
@@ -764,6 +703,7 @@ new class extends Component {
                         {{ __t('Gib deinen API-Key ein, um die automatische Cloud-Übersetzung zu aktivieren.') }}
                     </p>
 
+                    {{-- CTA Box für User ohne Key --}}
                     <div
                         class="mb-5 p-3 rounded-sm bg-[#080e20] border border-[#374151] flex items-center justify-between gap-3">
                         <div class="flex flex-col">
@@ -778,6 +718,7 @@ new class extends Component {
                         </a>
                     </div>
 
+                    {{-- Input Formular --}}
                     <div class="flex flex-col gap-1 mb-5">
                         <label class="text-[9px] font-bold uppercase text-[#9da4af]">{{ __t('Dein API-Key') }}</label>
                         <input type="password" wire:model="apiKeyInput" placeholder="l7_live_..."
@@ -802,5 +743,5 @@ new class extends Component {
             </div>
         @endif
 
-    </div>
+    </div> {{-- / Main Canvas-Dark Container --}}
 </div>
