@@ -112,7 +112,7 @@ new class extends Component {
     }
     //------------------------------------------------------------------------------------------------------------
 
-    public function checkApiBalance()
+public function checkApiBalance()
     {
         $configData = $this->readHubConfig();
         $savedKey = $configData['api_key'];
@@ -122,9 +122,39 @@ new class extends Component {
             return;
         }
 
-        $cachedQuota = $configData['last_known_quota'];
-        $this->wordBalance = $cachedQuota;
-        $this->autoTranslateEnabled = true;
+        // Server-Verifizierung beim Laden durchführen (erkennt gelöschte Keys nach DB-Resets)
+        $fullEndpoint = rtrim($this->apiUrl, '/') . '/verify-key';
+
+        try {
+            $response = Http::timeout(5)
+                ->acceptJson()
+                ->asJson()
+                ->post($fullEndpoint, [
+                    'api_key' => $savedKey,
+                ]);
+
+            $responseData = $response->json();
+
+            // Prüfen, ob der Server den Key noch akzeptiert
+            if ($response->successful() && ($responseData['status'] ?? '') === 'success') {
+                $this->autoTranslateEnabled = true;
+                $this->wordBalance = $responseData['remaining_balance'] ?? 0;
+                
+                // Lokalen Config-Cache mit aktuellen Server-Daten synchronisieren
+                $configData['last_known_quota'] = $this->wordBalance;
+                $configData['project_name'] = $responseData['project'] ?? 'Standard Projekt';
+                $configData['status'] = 'active';
+                $this->writeHubConfig($configData);
+            } else {
+                // Key existiert auf dem Server nicht mehr -> Automatischer Clean Reset!
+                $this->disableApi();
+            }
+        } catch (\Throwable $e) {
+            // Falls der Server komplett offline ist, behalten wir den letzten bekannten Cache-Wert bei
+            $cachedQuota = $configData['last_known_quota'] ?? 0;
+            $this->wordBalance = $cachedQuota;
+            $this->autoTranslateEnabled = true;
+        }
     }
     //------------------------------------------------------------------------------------------------------------
 
