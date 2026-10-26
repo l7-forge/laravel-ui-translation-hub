@@ -122,7 +122,6 @@ public function checkApiBalance()
             return;
         }
 
-        // Server-Verifizierung beim Laden durchführen (erkennt gelöschte Keys nach DB-Resets)
         $fullEndpoint = rtrim($this->apiUrl, '/') . '/verify-key';
 
         try {
@@ -135,22 +134,30 @@ public function checkApiBalance()
 
             $responseData = $response->json();
 
+            // Direkt hier protokollieren, damit wir jede Antwort sehen
+            \Illuminate\Support\Facades\Log::info('checkApiBalance Request durchgeführt', [
+                'endpoint' => $fullEndpoint,
+                'status' => $response->status(),
+                'successful' => $response->successful(),
+                'response' => $responseData ?? null
+            ]);
+
             // Prüfen, ob der Server den Key noch akzeptiert
             if ($response->successful() && ($responseData['status'] ?? '') === 'success') {
                 $this->autoTranslateEnabled = true;
                 $this->wordBalance = $responseData['remaining_balance'] ?? 0;
                 
-                // Lokalen Config-Cache mit aktuellen Server-Daten synchronisieren
                 $configData['last_known_quota'] = $this->wordBalance;
                 $configData['project_name'] = $responseData['project'] ?? 'Standard Projekt';
                 $configData['status'] = 'active';
                 $this->writeHubConfig($configData);
             } else {
-                // Key existiert auf dem Server nicht mehr -> Automatischer Clean Reset!
+                // Key existiert nicht mehr -> Automatischer Clean Reset!
                 $this->disableApi();
             }
         } catch (\Throwable $e) {
-            // Falls der Server komplett offline ist, behalten wir den letzten bekannten Cache-Wert bei
+            \Illuminate\Support\Facades\Log::error('checkApiBalance Exception', ['error' => $e->getMessage()]);
+
             $cachedQuota = $configData['last_known_quota'] ?? 0;
             $this->wordBalance = $cachedQuota;
             $this->autoTranslateEnabled = true;
