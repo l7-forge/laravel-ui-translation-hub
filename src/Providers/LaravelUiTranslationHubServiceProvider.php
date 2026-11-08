@@ -98,8 +98,7 @@ class LaravelUiTranslationHubServiceProvider extends ServiceProvider
 
     public function register(): void
     {
-        // Kein mergeConfigFrom mehr nötig, da alles autark über hub-config.json läuft!
-
+        // 1. Unser Custom Translator (der die JSON-Dateien und das Caching verwaltet)
         $this->app->singleton('custom_translator', function () {
             return new class {
                 public function translate($hexKey)
@@ -146,6 +145,53 @@ class LaravelUiTranslationHubServiceProvider extends ServiceProvider
                         File::put($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
                         Cache::forget("lang_json_{$baseLocale}");
                     }
+                }
+            };
+        });
+
+        // 2. WICHTIG: Das direkte Decorating des originalen Laravel-Translators
+        $this->app->extend('translator', function ($originalTranslator, $app) {
+            return new class($originalTranslator) implements \Illuminate\Contracts\Translation\Translator {
+                protected $originalTranslator;
+
+                public function __construct($originalTranslator)
+                {
+                    $this->originalTranslator = $originalTranslator;
+                }
+
+                public function get($key, array $replace = [], $locale = null, $fallback = true)
+                {
+                    $fallbackLocale = config('app.fallback_locale');
+
+                    // Wenn Laravel in der Fallback-Sprache einen Eintrag hat:
+                    if ($this->originalTranslator->has($key, $fallbackLocale)) {
+                        // Rohen Text aus der Fallback-Sprache holen (ohne Replacements)
+                        $rawFallbackText = $this->originalTranslator->get($key, [], $fallbackLocale);
+
+                        // Kanonisieren (:username -> __VAR1__) für den sauberen Master-Index
+                        $canonicalKey = canonicalize_translation_key($rawFallbackText);
+
+                        // Direkt in unsere __t() Engine übergeben!
+                        return __t($canonicalKey, $replace, $locale);
+                    }
+
+                    // Ansonsten Originales Resultat von Laravel zurückliefern
+                    return $this->originalTranslator->get($key, $replace, $locale, $fallback);
+                }
+
+                public function choice($key, $number, array $replace = [], $locale = null)
+                {
+                    return $this->originalTranslator->choice($key, $number, $replace, $locale);
+                }
+
+                public function getLocale()
+                {
+                    return $this->originalTranslator->getLocale();
+                }
+
+                public function setLocale($locale)
+                {
+                    $this->originalTranslator->setLocale($locale);
                 }
             };
         });
