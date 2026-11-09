@@ -161,22 +161,18 @@ class LaravelUiTranslationHubServiceProvider extends ServiceProvider
 
                 public function get($key, array $replace = [], $locale = null, $fallback = true)
                 {
-                    $fallbackLocale = config('app.fallback_locale');
+                    $fallbackLocale = config('app.fallback_locale', 'en');
 
-                    // Wenn Laravel in der Fallback-Sprache einen Eintrag hat:
-                    if ($this->originalTranslator->has($key, $fallbackLocale)) {
-                        // Rohen Text aus der Fallback-Sprache holen (ohne Replacements)
-                        $rawFallbackText = $this->originalTranslator->get($key, [], $fallbackLocale);
+                    // Jeden String abfangen (auch neue, die noch nicht im Fallback existieren)
+                    $rawText = $this->originalTranslator->has($key, $fallbackLocale)
+                        ? $this->originalTranslator->get($key, [], $fallbackLocale)
+                        : $key;
 
-                        // Kanonisieren (:username -> __VAR1__) für den sauberen Master-Index
-                        $canonicalKey = canonicalize_translation_key($rawFallbackText);
+                    // Sauber kanonisieren (:username, {count} -> __VAR1__, __VAR2__)
+                    $canonicalKey = canonicalize_translation_key($rawText);
 
-                        // Direkt in unsere __t() Engine übergeben!
-                        return __t($canonicalKey, $replace, $locale);
-                    }
-
-                    // Ansonsten Originales Resultat von Laravel zurückliefern
-                    return $this->originalTranslator->get($key, $replace, $locale, $fallback);
+                    // Direkt an unsere __t() Engine übergeben!
+                    return __t($canonicalKey, $replace, $locale);
                 }
 
                 public function choice($key, $number, array $replace = [], $locale = null)
