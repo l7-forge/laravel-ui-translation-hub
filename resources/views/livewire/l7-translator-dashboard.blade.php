@@ -436,16 +436,21 @@ new class extends Component {
 
         if ($this->totalQueueCount > 0) {
             $this->isTranslatingAll = true;
-            // Starte direkt das erste Element
-            $this->processNextQueueItem();
+            // Wir starten hier NICHT manuell, sondern lassen den wire:poll das erste Element abholen
         }
     }
 
     public function processNextQueueItem()
     {
+        if (!$this->isTranslatingAll) {
+            return;
+        }
+
         if (empty($this->missingQueue)) {
             $this->isTranslatingAll = false;
             $this->remainingTranslations = 0;
+            // Daten nach Abschluss einmal frisch einladen
+            $this->targetLanguageData = $this->loadIso($this->targetLocaleIso);
             return;
         }
 
@@ -454,11 +459,9 @@ new class extends Component {
 
         $this->remainingTranslations = count($this->missingQueue);
 
-        if ($this->remainingTranslations > 0) {
-            usleep(150000); // 150ms Pause zur Server-Entlastung
-            $this->dispatch('process-next-item'); // Triggert den nächsten Schritt sauber über Livewire an
-        } else {
+        if ($this->remainingTranslations <= 0) {
             $this->isTranslatingAll = false;
+            $this->targetLanguageData = $this->loadIso($this->targetLocaleIso);
         }
     }
 
@@ -537,7 +540,7 @@ new class extends Component {
 };
 ?>
 
-<div class="relative" @if($isTranslatingAll) wire:poll.150ms="processNextQueueItem" @endif>
+<div class="relative" @if($isTranslatingAll) wire:poll.300ms="processNextQueueItem" @endif>
     {{-- Full-Width Top API Radar Overlay --}}
     @if ($apiDebugEnabled)
         <div x-data="{ expanded: true }" class="fixed top-0 left-0 right-0 z-50 bg-[#010413] border-b border-[#4f46e5] shadow-2xl font-sans">
@@ -708,19 +711,13 @@ new class extends Component {
                                 </td>
 
                                 <td class="p-3 align-top">
-                                    <textarea rows="2" disabled
-                                        class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#9da4af] focus:outline-none resize-y min-h-[42px] cursor-not-allowed opacity-90">{{ hex2bin($key) }}</textarea>
+                                    <textarea rows="2" disabled class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#9da4af] focus:outline-none resize-y min-h-[42px] cursor-not-allowed opacity-90">{{ hex2bin($key) }}</textarea>
                                 </td>
 
                                 <td class="p-3 align-top" wire:key="translation-cell-{{ $key }}">
                                     <div class="flex gap-2 items-start w-full">
-                                        <textarea id="textarea-{{ $key }}" 
-                                            wire:key="textarea-{{ $key }}"
-                                            rows="2"
-                                            wire:change="saveKey('{{ $key }}', $event.target.value)"
-                                            class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none resize-y min-h-[42px]">
-                                            {{ $targetText }}
-                                        </textarea>
+                                        {{-- KORREKTUR: Keine Umbrüche oder Einrückungen im Textarea-Tag, um Whitespace-Fehler zu vermeiden --}}
+                                        <textarea id="textarea-{{ $key }}" wire:key="textarea-{{ $key }}" rows="2" wire:change="saveKey('{{ $key }}', $event.target.value)" class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none resize-y min-h-[42px]">{{ $targetText }}</textarea>
 
                                         <div class="flex flex-col gap-1 shrink-0">
                                             @if ($autoTranslateEnabled)
@@ -855,7 +852,7 @@ new class extends Component {
                     </div>
 
                     <div class="flex justify-end gap-2 pt-3 border-t border-[#374151]">
-                        <button type="button" wire:click="$set('showApiKeyModal', false)"
+                        <button type="button" wire:click="$set('showApiKeyModal, false)"
                             class="text-[10px] font-bold px-3 py-2 rounded-sm uppercase bg-[#1c1a2e] hover:bg-[#374151] text-white transition-colors">
                             {{ __t('Abbrechen') }}
                         </button>
