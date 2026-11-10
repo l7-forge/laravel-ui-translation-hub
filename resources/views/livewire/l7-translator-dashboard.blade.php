@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Http;
 use Livewire\Attributes\On;
 
 new class extends Component {
-    public $baseLocaleIso;
+    public $baseLocaleIso = 'en';
     public $targetLocaleIso;
     public $baseLanguageData = [];
     public $targetLanguageData = [];
@@ -94,13 +94,13 @@ new class extends Component {
         $this->apiUrl = $configData['api_url'] ?? 'http://l7-translation-api-server.test/api/v1';
 
         if (blank($this->apiUrl)) {
-            throw new \RuntimeException('Translation Hub Fehler: "api_url" ist nicht konfiguriert. Bitte prüfe deine hub-config.json.');
+            throw new \RuntimeException('Translation Hub Error: "api_url" is not configured. Please check your hub-config.json.');
         }
 
         $this->languagesTable = $configData['table_name'] ?? 'l7languages';
         $this->apiDebugEnabled = $configData['api_debug'] ?? false;
 
-        $this->baseLocaleIso = config('app.fallback_locale');
+        $this->baseLocaleIso = 'en';
         $this->baseLanguageData = $this->loadIso($this->baseLocaleIso);
 
         $this->availableLocales = DB::table($this->languagesTable)->where('code', '!=', $this->baseLocaleIso)->pluck('name', 'code')->toArray();
@@ -146,7 +146,7 @@ new class extends Component {
                 $this->wordBalance = $responseData['remaining_balance'] ?? 0;
                 
                 $configData['last_known_quota'] = $this->wordBalance;
-                $configData['project_name'] = $responseData['project'] ?? 'Standard Projekt';
+                $configData['project_name'] = $responseData['project'] ?? 'Standard Project';
                 $configData['status'] = 'active';
                 $this->writeHubConfig($configData);
             } else {
@@ -222,7 +222,7 @@ new class extends Component {
                 $configData['api_url'] = $this->apiUrl;
                 $configData['api_key'] = $this->apiKeyInput;
                 $configData['last_known_quota'] = $responseData['remaining_balance'] ?? 0;
-                $configData['project_name'] = $responseData['project_name'] ?? 'Standard Projekt';
+                $configData['project_name'] = $responseData['project_name'] ?? 'Standard Project';
                 $configData['last_checked_at'] = now()->toDateTimeString();
                 $configData['status'] = 'active';
 
@@ -259,7 +259,7 @@ new class extends Component {
                 ];
             }
 
-            $this->apiErrorMessage = 'Verbindung zum API-Server fehlgeschlagen: ' . $e->getMessage();
+            $this->apiErrorMessage = 'Connection to API server failed: ' . $e->getMessage();
         }
     }
 
@@ -374,10 +374,8 @@ new class extends Component {
             if ($response->successful() && isset($responseData['translation_hex'])) {
                 $hexResult = $responseData['translation_hex'];
 
-                // Im Memory-Array ablegen
                 $this->targetLanguageData[$hexKey] = $hexResult;
 
-                // Nur direkt speichern, wenn es kein Batch-Request ist
                 if ($autoSave) {
                     $this->persistData();
                 }
@@ -441,7 +439,6 @@ new class extends Component {
 
         if ($this->totalQueueCount > 0) {
             $this->isTranslatingAll = true;
-            // Sequenz starten: Dispatched das erste Event an den Browser
             $this->dispatch('process-next');
         }
     }
@@ -460,13 +457,11 @@ new class extends Component {
 
         $hexKey = array_shift($this->missingQueue);
         
-        // requestTranslation im Batch-Modus ($autoSave = false)
         $this->requestTranslation($hexKey, false);
 
         $this->remainingTranslations = count($this->missingQueue);
 
         if ($this->remainingTranslations > 0) {
-            // Erst wenn dieser Request komplett durch ist, den nächsten anstoßen!
             $this->dispatch('process-next');
         } else {
             $this->finishBatchTranslation();
@@ -478,10 +473,7 @@ new class extends Component {
         $this->isTranslatingAll = false;
         $this->remainingTranslations = 0;
         
-        // EINZIGER Schreibvorgang für den gesamten Batch
         $this->persistData();
-        
-        // Daten für die UI frisch laden
         $this->targetLanguageData = $this->loadIso($this->targetLocaleIso);
     }
 
@@ -494,19 +486,19 @@ new class extends Component {
         $name = trim($this->newLanguageName);
 
         if (empty($iso) || empty($name)) {
-            $this->errorMessage = 'Bitte alle Felder ausfüllen.';
+            $this->errorMessage = 'Please fill out all fields.';
             return;
         }
 
         if ($iso === $this->baseLocaleIso) {
-            $this->errorMessage = 'ISO entspricht der Base-Sprache.';
+            $this->errorMessage = 'ISO matches the base language.';
             return;
         }
 
         $exists = DB::table($this->languagesTable)->where('code', $iso)->exists();
 
         if ($exists) {
-            $this->errorMessage = 'ISO existiert bereits.';
+            $this->errorMessage = 'ISO already exists.';
             return;
         }
 
@@ -580,8 +572,8 @@ new class extends Component {
                     @endif
                     <button type="button" @click="expanded = !expanded"
                         class="text-xs font-bold text-[#9da4af] hover:text-white px-3 py-1 bg-[#0c0b16] border border-[#374151] rounded cursor-pointer">
-                        <span x-show="expanded">Minimieren &minus;</span>
-                        <span x-show="!expanded">Taskleiste öffnen &plus;</span>
+                        <span x-show="expanded">Minimize &minus;</span>
+                        <span x-show="!expanded">Open Taskbar &plus;</span>
                     </button>
                 </div>
             </div>
@@ -613,7 +605,7 @@ new class extends Component {
                     </div>
                 @else
                     <div class="py-6 text-center text-xs italic text-[#9da4af]">
-                        Warte auf API-Aufrufe... (Klicke auf 🌐 bei einem String oder teste die Verifizierung)
+                        Waiting for API calls... (Click 🌐 on a string or test verification)
                     </div>
                 @endif
             </div>
@@ -658,7 +650,7 @@ new class extends Component {
                 <select wire:model.live="targetLocaleIso"
                     class="px-3 py-1.5 rounded-sm text-[10px] font-bold uppercase bg-[#0c0b16] border border-[#374151] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none cursor-pointer">
                     @if (empty($availableLocales))
-                        <option value="">{{ __t('no Languages') }}</option>
+                        <option value="">{{ __t('No Languages') }}</option>
                     @else
                         @foreach ($availableLocales as $code => $name)
                             <option value="{{ $code }}">{{ strtoupper($code) }} - {{ __t($name) }}</option>
@@ -721,7 +713,7 @@ new class extends Component {
                             <tr wire:key="row-{{ $key }}" class="hover:bg-[#080e20]/60 transition-colors">
                                 <td class="p-3 text-center align-top">
                                     <button type="button" wire:click="deleteIndex('{{ $key }}')"
-                                        wire:confirm="{{ __t('Do you really want to remove this key from all languages ?') }}"
+                                        wire:confirm="{{ __t('Do you really want to remove this key from all languages?') }}"
                                         class="flex items-center justify-center rounded-sm p-1.5 bg-[#080e20] border border-[#374151] hover:border-[#f43f5e] hover:bg-[#f43f5e]/20 text-[#9da4af] hover:text-[#f43f5e] w-8 h-8 transition-colors cursor-pointer"
                                         title="{{ __t('Delete Key') }}">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -811,13 +803,13 @@ new class extends Component {
                         {{ __t('Add new Language') }}</div>
                     <div class="flex flex-col gap-3 mb-4">
                         <div>
-                            <label class="text-[9px] font-bold uppercase text-[#9da4af] block mb-1">Sprachname</label>
-                            <input type="text" wire:model="newLanguageName" placeholder="z.B. Spanish"
+                            <label class="text-[9px] font-bold uppercase text-[#9da4af] block mb-1">Language Name</label>
+                            <input type="text" wire:model="newLanguageName" placeholder="e.g. Spanish"
                                 class="text-xs px-3 py-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none w-full" />
                         </div>
                         <div>
-                            <label class="text-[9px] font-bold uppercase text-[#9da4af] block mb-1">ISO-Code</label>
-                            <input type="text" wire:model="newLanguageIso" placeholder="z.B. es" maxlength="5"
+                            <label class="text-[9px] font-bold uppercase text-[#9da4af] block mb-1">ISO Code</label>
+                            <input type="text" wire:model="newLanguageIso" placeholder="e.g. es" maxlength="5"
                                 class="text-xs px-3 py-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none w-full uppercase" />
                         </div>
                         @if ($errorMessage)
@@ -826,9 +818,9 @@ new class extends Component {
                     </div>
                     <div class="flex justify-end gap-2 pt-3 border-t border-[#374151]">
                         <button type="button" wire:click="$set('showAddForm', false)"
-                            class="text-[10px] font-bold px-3 py-2 rounded-sm uppercase bg-[#1c1a2e] text-white hover:bg-[#374151] transition-colors">Abbrechen</button>
+                            class="text-[10px] font-bold px-3 py-2 rounded-sm uppercase bg-[#1c1a2e] text-white hover:bg-[#374151] transition-colors">Cancel</button>
                         <button type="button" wire:click="addNewLanguage"
-                            class="text-[10px] font-bold px-4 py-2 rounded-sm uppercase bg-[#10b981] hover:bg-[#059669] text-white transition-colors">Speichern</button>
+                            class="text-[10px] font-bold px-4 py-2 rounded-sm uppercase bg-[#10b981] hover:bg-[#059669] text-white transition-colors">Save</button>
                     </div>
                 </div>
             </div>
@@ -843,7 +835,7 @@ new class extends Component {
                     </div>
 
                     <p class="text-[11px] text-[#9da4af] mb-4 leading-relaxed">
-                        {{ __t('Gib deinen API-Key ein, um die automatische Cloud-Übersetzung zu aktivieren.') }}
+                        {{ __t('Enter your API Key to enable automatic cloud translation.') }}
                     </p>
 
                     <div
@@ -861,7 +853,7 @@ new class extends Component {
                     </div>
 
                     <div class="flex flex-col gap-1 mb-5">
-                        <label class="text-[9px] font-bold uppercase text-[#9da4af]">{{ __t('Dein API-Key') }}</label>
+                        <label class="text-[9px] font-bold uppercase text-[#9da4af]">{{ __t('Your API Key') }}</label>
                         <input type="password" wire:model="apiKeyInput" placeholder="l7_live_..."
                             class="text-xs px-3 py-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none w-full" />
                         @if ($apiErrorMessage)
@@ -873,16 +865,15 @@ new class extends Component {
                     <div class="flex justify-end gap-2 pt-3 border-t border-[#374151]">
                         <button type="button" wire:click="$set('showApiKeyModal', false)"
                             class="text-[10px] font-bold px-3 py-2 rounded-sm uppercase bg-[#1c1a2e] hover:bg-[#374151] text-white transition-colors">
-                            {{ __t('Abbrechen') }}
+                            {{ __t('Cancel') }}
                         </button>
                         <button type="button" wire:click="verifyAndEnableApi"
                             class="text-[10px] font-bold px-4 py-2 rounded-sm uppercase bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shadow-sm">
-                            {{ __t('Verifizieren & Aktivieren') }}
+                            {{ __t('Verify & Enable') }}
                         </button>
                     </div>
                 </div>
             </div>
         @endif
-
     </div>
 </div>
