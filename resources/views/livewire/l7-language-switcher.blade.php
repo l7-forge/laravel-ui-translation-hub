@@ -38,10 +38,18 @@ new class extends Component {
 
         if ($exists) {
             // Cache für die gewählte Sprache leeren, damit alles frisch geladen wird
-            Cache::forget("lang_json_{$locale}");
 
-            Session::put('locale', $locale);
-            App::setLocale($locale);
+             Cache::forget("lang_json_{$locale}");
+
+                session()->put('locale', $locale);
+                session()->save(); // Sicherstellen, dass die Session sofort geschrieben wird
+
+
+            // Cache::forget("lang_json_{$locale}");
+
+            // Session::put('locale', $locale);
+            // App::setLocale($locale);
+            // session()->save();
             
             // Seite neu laden, damit alle UI-Skelette die neue Übersetzung annehmen
             return $this->redirect(request()->header('Referer', '/'), navigate: false);
