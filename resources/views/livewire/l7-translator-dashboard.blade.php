@@ -134,13 +134,6 @@ new class extends Component {
 
             $responseData = $response->json();
 
-            \Illuminate\Support\Facades\Log::info('checkApiBalance Request durchgeführt', [
-                'endpoint' => $fullEndpoint,
-                'status' => $response->status(),
-                'successful' => $response->successful(),
-                'response' => $responseData ?? null
-            ]);
-
             if ($response->successful() && ($responseData['status'] ?? '') === 'success') {
                 $this->autoTranslateEnabled = true;
                 $this->wordBalance = $responseData['remaining_balance'] ?? 0;
@@ -153,8 +146,6 @@ new class extends Component {
                 $this->disableApi();
             }
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('checkApiBalance Exception', ['error' => $e->getMessage()]);
-
             $cachedQuota = $configData['last_known_quota'] ?? 0;
             $this->wordBalance = $cachedQuota;
             $this->autoTranslateEnabled = true;
@@ -366,6 +357,7 @@ new class extends Component {
                 $hexResult = $responseData['translation_hex'];
                 $plainResult = hex2bin($hexResult);
 
+                // Daten im Server-State aktualisieren, ohne dass Livewire einen harten DOM-Fehler wirft
                 $this->targetLanguageData[$hexKey] = $hexResult;
                 $this->persistData();
 
@@ -374,7 +366,7 @@ new class extends Component {
                     $this->wordBalance = $remaining;
                     
                     $configData = $this->readHubConfig();
-                    $configData['last_known_quota'] = $remaining;
+                    $configData['last_known_quota']  = $remaining;
                     $this->writeHubConfig($configData);
 
                     if ($remaining <= 0) {
@@ -382,6 +374,7 @@ new class extends Component {
                     }
                 }
 
+                // Wichtig: Dispatch an Browser, damit Alpine den Wert direkt einfügt, ohne Full-Page-Render-Konflikt
                 $this->dispatch('translation-received', key: $hexKey, translation: $plainResult, balance: $remaining);
             }
         } catch (\Throwable $e) {
@@ -681,11 +674,14 @@ new class extends Component {
                                     }"
                                     @translation-received.window="if ($event.detail.key === '{{ $key }}') { text = $event.detail.translation; saved = true; dirty = false; }">
                                     <div class="flex gap-2 items-start w-full">
-                                        <textarea id="textarea-{{ $key }}" 
-                                            x-model="text"
-                                            x-on:input="dirty = true; saved = false;"
-                                            rows="2"
-                                            class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none resize-y min-h-[42px]"></textarea>
+                                        {{-- Wichtig: wire:ignore verhindert, dass Livewire die Textarea beim Re-Rendern zerschießt oder einen Reload erzwingt --}}
+                                        <div wire:ignore class="w-full">
+                                            <textarea id="textarea-{{ $key }}" 
+                                                x-model="text"
+                                                x-on:input="dirty = true; saved = false;"
+                                                rows="2"
+                                                class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none resize-y min-h-[42px]"></textarea>
+                                        </div>
 
                                         <div class="flex flex-col gap-1 shrink-0">
                                             @if ($autoTranslateEnabled)
