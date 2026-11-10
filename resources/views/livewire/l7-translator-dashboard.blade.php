@@ -673,15 +673,15 @@ new class extends Component {
                                 </td>
 
                                 <td class="p-3 align-top" 
+                                    wire:key="translation-cell-{{ $key }}"
                                     x-data="{ 
                                         dirty: false, 
                                         saved: false,
-                                        text: '{{ isset($targetLanguageData[$key]) ? addslashes(hex2bin($targetLanguageData[$key])) : '' }}'
+                                        text: @js(isset($targetLanguageData[$key]) ? hex2bin($targetLanguageData[$key]) : '')
                                     }"
                                     @translation-received.window="if ($event.detail.key === '{{ $key }}') { text = $event.detail.translation; saved = true; dirty = false; }">
                                     <div class="flex gap-2 items-start w-full">
                                         <textarea id="textarea-{{ $key }}" 
-                                            wire:key="textarea-{{ $key }}"
                                             x-model="text"
                                             x-on:input="dirty = true; saved = false;"
                                             rows="2"
