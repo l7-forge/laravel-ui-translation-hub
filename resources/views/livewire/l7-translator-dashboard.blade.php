@@ -321,7 +321,7 @@ new class extends Component {
 
     //------------------------------------------------------------------------------------------------------------
 
-    public function requestTranslation($hexKey)
+    public function requestTranslation($hexKey, $autoSave = true)
     {
         if (!$this->autoTranslateEnabled) {
             return;
@@ -374,8 +374,13 @@ new class extends Component {
             if ($response->successful() && isset($responseData['translation_hex'])) {
                 $hexResult = $responseData['translation_hex'];
 
+                // Im Memory-Array ablegen
                 $this->targetLanguageData[$hexKey] = $hexResult;
-                $this->persistData();
+
+                // Nur direkt speichern, wenn es kein Batch-Request ist
+                if ($autoSave) {
+                    $this->persistData();
+                }
 
                 $remaining = $responseData['remaining_balance'] ?? null;
                 if ($remaining !== null) {
@@ -436,10 +441,12 @@ new class extends Component {
 
         if ($this->totalQueueCount > 0) {
             $this->isTranslatingAll = true;
-            // Wir starten hier NICHT manuell, sondern lassen den wire:poll das erste Element abholen
+            // Sequenz starten: Dispatched das erste Event an den Browser
+            $this->dispatch('process-next');
         }
     }
 
+    #[On('process-next')]
     public function processNextQueueItem()
     {
         if (!$this->isTranslatingAll) {
@@ -447,22 +454,35 @@ new class extends Component {
         }
 
         if (empty($this->missingQueue)) {
-            $this->isTranslatingAll = false;
-            $this->remainingTranslations = 0;
-            // Daten nach Abschluss einmal frisch einladen
-            $this->targetLanguageData = $this->loadIso($this->targetLocaleIso);
+            $this->finishBatchTranslation();
             return;
         }
 
         $hexKey = array_shift($this->missingQueue);
-        $this->requestTranslation($hexKey);
+        
+        // requestTranslation im Batch-Modus ($autoSave = false)
+        $this->requestTranslation($hexKey, false);
 
         $this->remainingTranslations = count($this->missingQueue);
 
-        if ($this->remainingTranslations <= 0) {
-            $this->isTranslatingAll = false;
-            $this->targetLanguageData = $this->loadIso($this->targetLocaleIso);
+        if ($this->remainingTranslations > 0) {
+            // Erst wenn dieser Request komplett durch ist, den nächsten anstoßen!
+            $this->dispatch('process-next');
+        } else {
+            $this->finishBatchTranslation();
         }
+    }
+
+    private function finishBatchTranslation()
+    {
+        $this->isTranslatingAll = false;
+        $this->remainingTranslations = 0;
+        
+        // EINZIGER Schreibvorgang für den gesamten Batch
+        $this->persistData();
+        
+        // Daten für die UI frisch laden
+        $this->targetLanguageData = $this->loadIso($this->targetLocaleIso);
     }
 
     //------------------------------------------------------------------------------------------------------------
@@ -540,7 +560,7 @@ new class extends Component {
 };
 ?>
 
-<div class="relative" @if($isTranslatingAll) wire:poll.300ms="processNextQueueItem" @endif>
+<div class="relative">
     {{-- Full-Width Top API Radar Overlay --}}
     @if ($apiDebugEnabled)
         <div x-data="{ expanded: true }" class="fixed top-0 left-0 right-0 z-50 bg-[#010413] border-b border-[#4f46e5] shadow-2xl font-sans">
@@ -716,7 +736,6 @@ new class extends Component {
 
                                 <td class="p-3 align-top" wire:key="translation-cell-{{ $key }}">
                                     <div class="flex gap-2 items-start w-full">
-                                        {{-- KORREKTUR: Keine Umbrüche oder Einrückungen im Textarea-Tag, um Whitespace-Fehler zu vermeiden --}}
                                         <textarea id="textarea-{{ $key }}" wire:key="textarea-{{ $key }}" rows="2" wire:change="saveKey('{{ $key }}', $event.target.value)" class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none resize-y min-h-[42px]">{{ $targetText }}</textarea>
 
                                         <div class="flex flex-col gap-1 shrink-0">
@@ -852,7 +871,7 @@ new class extends Component {
                     </div>
 
                     <div class="flex justify-end gap-2 pt-3 border-t border-[#374151]">
-                        <button type="button" wire:click="$set('showApiKeyModal, false)"
+                        <button type="button" wire:click="$set('showApiKeyModal', false)"
                             class="text-[10px] font-bold px-3 py-2 rounded-sm uppercase bg-[#1c1a2e] hover:bg-[#374151] text-white transition-colors">
                             {{ __t('Abbrechen') }}
                         </button>
