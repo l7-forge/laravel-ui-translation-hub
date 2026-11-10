@@ -35,12 +35,13 @@ new class extends Component {
         
         // Kurzer Schutz: Prüfen ob die Sprache (oder die Base-Sprache) existiert/valide ist
         $exists = DB::table($tableName)->where('code', $locale)->exists() || $locale === config('app.fallback_locale');
-
+        
         if ($exists) {
             // Cache für die gewählte Sprache leeren, damit alles frisch geladen wird
             Cache::forget("lang_json_{$locale}");
 
             Session::put('locale', $locale);
+            echo "setting locale to: $locale";
             App::setLocale($locale);
             
             // Seite neu laden, damit alle UI-Skelette die neue Übersetzung annehmen
