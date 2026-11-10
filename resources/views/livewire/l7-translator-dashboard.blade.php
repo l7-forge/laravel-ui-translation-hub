@@ -85,13 +85,15 @@ new class extends Component {
     {
         $configData = $this->readHubConfig();
 
-        $this->apiUrl = $configData['api_url'];
+        $this->apiUrl = $configData['api_url'] ?? 'http://l7-translation-api-server.test/api/v1';
 
         if (blank($this->apiUrl)) {
             throw new \RuntimeException('Translation Hub Fehler: "api_url" ist nicht konfiguriert. Bitte prüfe deine hub-config.json.');
         }
 
-        $this->languagesTable = $configData['table_name'];
+        $this->languagesTable = $configData['table_name'] ?? 'l7languages';
+        $this->apiDebugEnabled = $configData['api_debug'] ?? false;
+
         $this->baseLocaleIso = config('app.fallback_locale');
         $this->baseLanguageData = $this->loadIso($this->baseLocaleIso);
 
@@ -100,9 +102,7 @@ new class extends Component {
         $this->targetLocaleIso = !empty($this->availableLocales) ? array_key_first($this->availableLocales) : null;
         $this->targetLanguageData = $this->targetLocaleIso ? $this->loadIso($this->targetLocaleIso) : [];
 
-        $this->apiDebugEnabled = $configData['api_debug'];
-
-        $savedKey = $configData['api_key'];
+        $savedKey = $configData['api_key'] ?? '';
 
         if (!empty($savedKey)) {
             $this->apiKeyInput = $savedKey;
@@ -112,10 +112,10 @@ new class extends Component {
     }
     //------------------------------------------------------------------------------------------------------------
 
-public function checkApiBalance()
+    public function checkApiBalance()
     {
         $configData = $this->readHubConfig();
-        $savedKey = $configData['api_key'];
+        $savedKey = $configData['api_key'] ?? '';
 
         if (empty($savedKey)) {
             $this->disableApi();
@@ -134,7 +134,6 @@ public function checkApiBalance()
 
             $responseData = $response->json();
 
-            // Direkt hier protokollieren, damit wir jede Antwort sehen
             \Illuminate\Support\Facades\Log::info('checkApiBalance Request durchgeführt', [
                 'endpoint' => $fullEndpoint,
                 'status' => $response->status(),
@@ -142,7 +141,6 @@ public function checkApiBalance()
                 'response' => $responseData ?? null
             ]);
 
-            // Prüfen, ob der Server den Key noch akzeptiert
             if ($response->successful() && ($responseData['status'] ?? '') === 'success') {
                 $this->autoTranslateEnabled = true;
                 $this->wordBalance = $responseData['remaining_balance'] ?? 0;
@@ -152,7 +150,6 @@ public function checkApiBalance()
                 $configData['status'] = 'active';
                 $this->writeHubConfig($configData);
             } else {
-                // Key existiert nicht mehr -> Automatischer Clean Reset!
                 $this->disableApi();
             }
         } catch (\Throwable $e) {
@@ -170,7 +167,7 @@ public function checkApiBalance()
         $this->apiErrorMessage = '';
 
         if (empty($this->apiKeyInput)) {
-            $this->apiErrorMessage = __t('Bitte gib deinen API-Key ein.');
+            $this->apiErrorMessage = __t('Please enter your API Key.');
             return;
         }
 
@@ -212,7 +209,7 @@ public function checkApiBalance()
                 session(['UI_TRANSLATION_HUB_API_KEY' => $this->apiKeyInput]);
 
                 $configData = $this->readHubConfig();
-                $configData['server_url'] = $this->apiUrl;
+                $configData['api_url'] = $this->apiUrl;
                 $configData['api_key'] = $this->apiKeyInput;
                 $configData['last_known_quota'] = $responseData['remaining_balance'] ?? 0;
                 $configData['project_name'] = $responseData['project_name'] ?? 'Standard Projekt';
@@ -324,7 +321,7 @@ public function checkApiBalance()
         $apiKey = session('UI_TRANSLATION_HUB_API_KEY');
         if (empty($apiKey)) {
             $configData = $this->readHubConfig();
-            $apiKey = $configData['api_key'];
+            $apiKey = $configData['api_key'] ?? '';
         }
 
         $payloadData = [
@@ -763,9 +760,9 @@ public function checkApiBalance()
                         class="mb-5 p-3 rounded-sm bg-[#080e20] border border-[#374151] flex items-center justify-between gap-3">
                         <div class="flex flex-col">
                             <span
-                                class="text-[10px] font-bold text-white uppercase">{{ __t('Noch keinen Key?') }}</span>
+                                class="text-[10px] font-bold text-white uppercase">{{ __t("Don't have a Key?") }}</span>
                             <span
-                                class="text-[9px] text-[#9da4af]">{{ __t('Kostenlos registrieren & Kontingent sichern.') }}</span>
+                                class="text-[9px] text-[#9da4af]">{{ __t('Register for Free & Secure Your Quota.') }}</span>
                         </div>
                         <a href="{{ rtrim($apiUrl, '/') }}/register" target="_blank" rel="noopener noreferrer"
                             class="link shrink-0 text-[10px] font-black uppercase px-3 py-1.5 rounded-sm bg-[#4f46e5] hover:bg-indigo-500 text-white transition-colors shadow-sm">
