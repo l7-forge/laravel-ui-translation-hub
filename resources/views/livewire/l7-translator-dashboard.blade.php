@@ -35,6 +35,12 @@ new class extends Component {
     public $apiDebugEnabled = false;
     public $lastApiInspect = null;
 
+    // Batch Translation Modal & Queue Properties
+    public $isTranslatingAll = false;
+    public $missingQueue = [];
+    public $totalQueueCount = 0;
+    public $remainingTranslations = 0;
+
     protected function getConfigPath()
     {
         return lang_path('hub-config.json');
@@ -110,6 +116,7 @@ new class extends Component {
             $this->checkApiBalance();
         }
     }
+
     //------------------------------------------------------------------------------------------------------------
 
     public function checkApiBalance()
@@ -151,6 +158,18 @@ new class extends Component {
             $this->autoTranslateEnabled = true;
         }
     }
+
+    //------------------------------------------------------------------------------------------------------------
+
+    public function toggleApi()
+    {
+        if ($this->autoTranslateEnabled) {
+            $this->disableApi();
+        } else {
+            $this->showApiKeyModal = true;
+        }
+    }
+
     //------------------------------------------------------------------------------------------------------------
 
     public function verifyAndEnableApi()
@@ -243,6 +262,7 @@ new class extends Component {
             $this->apiErrorMessage = 'Verbindung zum API-Server fehlgeschlagen: ' . $e->getMessage();
         }
     }
+
     //------------------------------------------------------------------------------------------------------------
 
     public function disableApi()
@@ -258,12 +278,14 @@ new class extends Component {
         $this->wordBalance = '---';
         $this->apiKeyInput = '';
     }
+
     //------------------------------------------------------------------------------------------------------------
 
     public function loadAvailableLocales()
     {
         $this->availableLocales = DB::table($this->languagesTable)->where('code', '!=', $this->baseLocaleIso)->pluck('name', 'code')->toArray();
     }
+
     //------------------------------------------------------------------------------------------------------------
 
     public function loadIso($iso)
@@ -271,13 +293,7 @@ new class extends Component {
         $path = lang_path("{$iso}.json");
         return File::exists($path) ? json_decode(File::get($path), true) : [];
     }
-    //------------------------------------------------------------------------------------------------------------
 
-    #[On('save-key')]
-    public function handleSave($key, $val)
-    {
-        $this->saveKey($key, $val);
-    }
     //------------------------------------------------------------------------------------------------------------
 
     public function saveKey($key, $newText)
@@ -285,6 +301,7 @@ new class extends Component {
         $this->targetLanguageData[$key] = bin2hex($newText);
         $this->persistData();
     }
+
     //------------------------------------------------------------------------------------------------------------
 
     private function persistData()
@@ -301,6 +318,7 @@ new class extends Component {
         File::put($path, json_encode($this->targetLanguageData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
         Cache::forget("lang_json_{$this->targetLocaleIso}");
     }
+
     //------------------------------------------------------------------------------------------------------------
 
     public function requestTranslation($hexKey)
@@ -355,27 +373,18 @@ new class extends Component {
 
             if ($response->successful() && isset($responseData['translation_hex'])) {
                 $hexResult = $responseData['translation_hex'];
-                $plainResult = hex2bin($hexResult);
 
-                // Daten im Server-State aktualisieren, ohne dass Livewire einen harten DOM-Fehler wirft
                 $this->targetLanguageData[$hexKey] = $hexResult;
                 $this->persistData();
 
                 $remaining = $responseData['remaining_balance'] ?? null;
                 if ($remaining !== null) {
                     $this->wordBalance = $remaining;
-                    
-                    $configData = $this->readHubConfig();
-                    $configData['last_known_quota']  = $remaining;
-                    $this->writeHubConfig($configData);
 
                     if ($remaining <= 0) {
                         $this->disableApi();
                     }
                 }
-
-                // Wichtig: Dispatch an Browser, damit Alpine den Wert direkt einfügt, ohne Full-Page-Render-Konflikt
-                $this->dispatch('translation-received', key: $hexKey, translation: $plainResult, balance: $remaining);
             }
         } catch (\Throwable $e) {
             $durationMs = (int) round((microtime(true) - $startTime) * 1000);
@@ -397,6 +406,7 @@ new class extends Component {
             }
         }
     }
+
     //------------------------------------------------------------------------------------------------------------
 
     public function updatedTargetLocaleIso()
@@ -409,16 +419,49 @@ new class extends Component {
 
         $this->targetLanguageData = $this->loadIso($this->targetLocaleIso);
     }
+
     //------------------------------------------------------------------------------------------------------------
 
-    public function translateAll()
+    public function startTranslateAll()
     {
+        $this->missingQueue = [];
         foreach ($this->baseLanguageData as $hexKey => $value) {
             if (!isset($this->targetLanguageData[$hexKey]) || empty(hex2bin($this->targetLanguageData[$hexKey]))) {
-                $this->requestTranslation($hexKey);
+                $this->missingQueue[] = $hexKey;
             }
         }
+
+        $this->totalQueueCount = count($this->missingQueue);
+        $this->remainingTranslations = $this->totalQueueCount;
+
+        if ($this->totalQueueCount > 0) {
+            $this->isTranslatingAll = true;
+            // Starte direkt das erste Element
+            $this->processNextQueueItem();
+        }
     }
+
+    public function processNextQueueItem()
+    {
+        if (empty($this->missingQueue)) {
+            $this->isTranslatingAll = false;
+            $this->remainingTranslations = 0;
+            return;
+        }
+
+        $hexKey = array_shift($this->missingQueue);
+        $this->requestTranslation($hexKey);
+
+        $this->remainingTranslations = count($this->missingQueue);
+
+        if ($this->remainingTranslations > 0) {
+            usleep(150000); // 150ms Pause zur Server-Entlastung
+            $this->dispatch('process-next-item'); // Triggert den nächsten Schritt sauber über Livewire an
+        } else {
+            $this->isTranslatingAll = false;
+        }
+    }
+
     //------------------------------------------------------------------------------------------------------------
 
     public function addNewLanguage()
@@ -459,6 +502,7 @@ new class extends Component {
         $this->targetLocaleIso = $iso;
         $this->targetLanguageData = $this->loadIso($iso);
     }
+
     //------------------------------------------------------------------------------------------------------------
 
     public function deleteIndex($hexKey)
@@ -488,11 +532,12 @@ new class extends Component {
         $this->baseLanguageData = $this->loadIso($this->baseLocaleIso);
         $this->targetLanguageData = $this->targetLocaleIso ? $this->loadIso($this->targetLocaleIso) : [];
     }
+
     //------------------------------------------------------------------------------------------------------------
 };
 ?>
 
-<div class="relative" x-data="{ balance: '{{ $wordBalance }}' }" @translation-received.window="if ($event.detail.balance !== undefined) { balance = $event.detail.balance; }">
+<div class="relative" @if($isTranslatingAll) wire:poll.150ms="processNextQueueItem" @endif>
     {{-- Full-Width Top API Radar Overlay --}}
     @if ($apiDebugEnabled)
         <div x-data="{ expanded: true }" class="fixed top-0 left-0 right-0 z-50 bg-[#010413] border-b border-[#4f46e5] shadow-2xl font-sans">
@@ -571,11 +616,10 @@ new class extends Component {
             class="flex justify-between items-center mb-8 p-3 bg-[#f7f9fb] dark:bg-[#080e20] rounded-sm border border-[#cbd5e1] dark:border-[#374151]">
             <div class="flex items-center gap-4">
                 @if ($autoTranslateEnabled)
-                    <button type="button" wire:click="translateAll" wire:loading.attr="disabled"
-                        @if (empty($availableLocales)) disabled @endif
-                        class="text-[10px] font-bold px-2 py-3 rounded-sm uppercase bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                        <span wire:loading.remove wire:target="translateAll">Translate All Missing</span>
-                        <span wire:loading wire:target="translateAll">Translating...</span>
+                    <button type="button" wire:click="startTranslateAll"
+                        @if (empty($availableLocales) || $isTranslatingAll) disabled @endif
+                        class="text-[10px] font-bold px-3 py-3 rounded-sm uppercase bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                        <span>Translate All Missing</span>
                     </button>
                 @endif
 
@@ -611,7 +655,7 @@ new class extends Component {
             <div class="flex items-center gap-3">
                 <label class="relative inline-flex items-center cursor-pointer select-none">
                     <input type="checkbox"
-                        wire:click="{{ $autoTranslateEnabled ? 'disableApi' : '$set(\'showApiKeyModal\', true)' }}"
+                        wire:click="toggleApi"
                         @checked($autoTranslateEnabled) class="sr-only peer">
                     <div
                         class="w-8 h-4 bg-[#1c1a2e] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all {{ $autoTranslateEnabled ? 'peer-checked:bg-[#10b981]' : 'bg-[#f59e0b]' }}">
@@ -626,7 +670,7 @@ new class extends Component {
                 @if ($autoTranslateEnabled)
                     <span class="text-[10px] font-bold uppercase text-[#9da4af]">
                         Remaining chars: <span
-                            class="text-[#10b981] font-mono font-black ml-1 text-lg" x-text="balance"></span>
+                            class="text-[#10b981] font-mono font-black ml-1 text-lg">{{ $wordBalance }}</span>
                     </span>
                 @else
                     <span class="text-[10px] italic text-[#f59e0b]">Connect your L7 Translation Hub Account to unlock Cloud Features.</span>
@@ -648,6 +692,9 @@ new class extends Component {
                 <tbody class="divide-y divide-[#374151]">
                     @foreach ($baseLanguageData as $key => $value)
                         @if ($filter == 'all' || !isset($targetLanguageData[$key]))
+                            @php
+                                $targetText = isset($targetLanguageData[$key]) ? hex2bin($targetLanguageData[$key]) : '';
+                            @endphp
                             <tr wire:key="row-{{ $key }}" class="hover:bg-[#080e20]/60 transition-colors">
                                 <td class="p-3 text-center align-top">
                                     <button type="button" wire:click="deleteIndex('{{ $key }}')"
@@ -665,37 +712,31 @@ new class extends Component {
                                         class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#9da4af] focus:outline-none resize-y min-h-[42px] cursor-not-allowed opacity-90">{{ hex2bin($key) }}</textarea>
                                 </td>
 
-                                <td class="p-3 align-top" 
-                                    wire:key="translation-cell-{{ $key }}"
-                                    x-data="{ 
-                                        dirty: false, 
-                                        saved: false,
-                                        text: @js(isset($targetLanguageData[$key]) ? hex2bin($targetLanguageData[$key]) : '')
-                                    }"
-                                    @translation-received.window="if ($event.detail.key === '{{ $key }}') { text = $event.detail.translation; saved = true; dirty = false; }">
+                                <td class="p-3 align-top" wire:key="translation-cell-{{ $key }}">
                                     <div class="flex gap-2 items-start w-full">
-                                        {{-- Wichtig: wire:ignore verhindert, dass Livewire die Textarea beim Re-Rendern zerschießt oder einen Reload erzwingt --}}
-                                        <div wire:ignore class="w-full">
-                                            <textarea id="textarea-{{ $key }}" 
-                                                x-model="text"
-                                                x-on:input="dirty = true; saved = false;"
-                                                rows="2"
-                                                class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none resize-y min-h-[42px]"></textarea>
-                                        </div>
+                                        <textarea id="textarea-{{ $key }}" 
+                                            wire:key="textarea-{{ $key }}"
+                                            rows="2"
+                                            wire:change="saveKey('{{ $key }}', $event.target.value)"
+                                            class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none resize-y min-h-[42px]">
+                                            {{ $targetText }}
+                                        </textarea>
 
                                         <div class="flex flex-col gap-1 shrink-0">
                                             @if ($autoTranslateEnabled)
                                                 <button type="button"
                                                     wire:click="requestTranslation('{{ $key }}')"
+                                                    wire:loading.attr="disabled"
                                                     class="flex items-center justify-center rounded-sm p-1.5 bg-[#080e20] border border-[#374151] hover:border-[#4f46e5] hover:bg-[#4f46e5]/20 text-[#9da4af] hover:text-[#4f46e5] w-8 h-8 transition-colors cursor-pointer"
-                                                    title="Auto-Translate">🌐</button>
+                                                    title="Auto-Translate">
+                                                    <span wire:loading.remove wire:target="requestTranslation('{{ $key }}')">🌐</span>
+                                                    <span wire:loading wire:target="requestTranslation('{{ $key }}')" class="animate-spin text-[10px]">⏳</span>
+                                                </button>
                                             @endif
 
                                             <button type="button"
-                                                wire:click="saveKey('{{ $key }}', text)"
-                                                @click="dirty = false; saved = true;"
-                                                :class="dirty ? 'bg-[#080e20] border border-[#10b981] text-[#10b981] hover:bg-[#10b981]/20 hover:text-[#10b981] hover:border-[#10b981]' : (saved ? 'bg-[#10b981]/10 border border-[#10b981]/40 text-[#10b981]' : 'bg-[#080e20] border border-[#374151] text-[#9da4af] hover:border-[#10b981] hover:bg-[#10b981]/20 hover:text-[#10b981]')"
-                                                class="flex items-center justify-center rounded-sm p-1.5 w-8 h-8 transition-colors cursor-pointer shadow-sm"
+                                                onclick="const el = document.getElementById('textarea-{{ $key }}'); @this.saveKey('{{ $key }}', el.value);"
+                                                class="flex items-center justify-center rounded-sm p-1.5 w-8 h-8 bg-[#080e20] border border-[#374151] text-[#9da4af] hover:border-[#10b981] hover:bg-[#10b981]/20 hover:text-[#10b981] transition-colors cursor-pointer shadow-sm"
                                                 title="Save">
                                                 ✓
                                             </button>
@@ -708,6 +749,43 @@ new class extends Component {
                 </tbody>
             </table>
         </div>
+
+        {{-- Progress Modal for Translate All --}}
+        @if ($isTranslatingAll)
+            @php
+                $completed = $totalQueueCount - $remainingTranslations;
+                $percent = $totalQueueCount > 0 ? round(($completed / $totalQueueCount) * 100) : 0;
+            @endphp
+            <div class="fixed inset-0 z-50 flex items-center justify-center bg-[#010413]/90 backdrop-blur-xs p-4">
+                <div class="bg-[#080e20] border border-[#374151] rounded-sm w-full max-w-md p-6 shadow-2xl text-center space-y-4">
+                    <div class="flex items-center justify-center space-x-2">
+                        <span class="w-3 h-3 rounded-full bg-[#4f46e5] animate-ping"></span>
+                        <div class="text-sm font-black uppercase tracking-wider text-white">
+                            {{ __t('Cloud Translation in Progress') }}
+                        </div>
+                    </div>
+
+                    <p class="text-xs text-[#9da4af]">
+                        {{ __t('Translating missing keys sequentially to prevent server timeouts...') }}
+                    </p>
+
+                    {{-- Progress Bar --}}
+                    <div class="space-y-2">
+                        <div class="w-full bg-[#0c0b16] rounded-full h-3 border border-[#374151] overflow-hidden p-0.5">
+                            <div class="bg-[#4f46e5] h-full rounded-full transition-all duration-300" style="width: {{ $percent }}%;"></div>
+                        </div>
+                        <div class="flex justify-between text-[10px] font-mono text-[#9da4af]">
+                            <span>{{ $completed }} / {{ $totalQueueCount }} {{ __t('Processed') }}</span>
+                            <span class="font-bold text-white">{{ $percent }}%</span>
+                        </div>
+                    </div>
+
+                    <div class="text-[10px] italic text-[#9da4af] pt-2 border-t border-[#374151]">
+                        {{ __t('Remaining items') }}: <span class="font-mono text-indigo-400 font-bold">{{ $remainingTranslations }}</span>
+                    </div>
+                </div>
+            </div>
+        @endif
 
         {{-- Add Language Modal --}}
         @if ($showAddForm)
