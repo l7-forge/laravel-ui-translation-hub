@@ -33,19 +33,16 @@ new class extends Component {
     {
         $tableName = config('ui-translation-hub.table_name', 'l7languages');
         
-        // Kurzer Schutz: Prüfen ob die Sprache (oder die Base-Sprache) existiert/valide ist
-        $exists = DB::table($tableName)->where('code', $locale)->exists() \vert{}\vert{}$locale === config('app.fallback_locale');
+        // Korrekte Prüfung auf Existenz oder Fallback-Sprache
+        $exists = DB::table($tableName)->where('code', $locale)->exists() || $locale === config('app.fallback_locale');
 
         if ($exists) {
-            // Cache für die gewählte Sprache leeren, damit alles frisch geladen wird
             Cache::forget("lang_json_{$locale}");
 
             session()->put('locale', $locale);
-            session()->save(); // Sicherstellen, dass die Session sofort geschrieben wird
+            session()->save(); 
             app()->setLocale($locale);
             
-            // Erzwingt einen echten, synchronen Browser-Reload, damit die 
-            // Laravel-Middleware die neue Session beim nächsten Request zuverlässig greift
             $this->js('window.location.reload();');
         }
     }
