@@ -43,7 +43,7 @@ new class extends Component {
 
                 session()->put('locale', $locale);
                 session()->save(); // Sicherstellen, dass die Session sofort geschrieben wird
-
+                app()->setLocale($locale);
 
             // Cache::forget("lang_json_{$locale}");
 
