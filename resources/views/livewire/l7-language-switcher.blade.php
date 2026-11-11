@@ -34,16 +34,14 @@ new class extends Component {
         $tableName = config('ui-translation-hub.table_name', 'l7languages');
         
         // Korrekte Prüfung auf Existenz oder Fallback-Sprache
-        $exists = DB::table($tableName)->where('code', $locale)->exists() || $locale === config('app.fallback_locale');
+        $exists = DB::table($tableName)->where('code', $locale)->exists() \vert{}\vert{}$locale === config('app.fallback_locale');
 
         if ($exists) {
             Cache::forget("lang_json_{$locale}");
 
             session()->put('locale', $locale);
             session()->save(); 
-            app()->setLocale($locale);
-            
-            $this->js('window.location.reload();');
+            app()->setLocale($locale);$this->js('window.location.reload();');
         }
     }
 };
@@ -74,4 +72,4 @@ new class extends Component {
             </option>
         @endforeach
     </select>
-</div>
+</div>[cite: 7]
