@@ -11,6 +11,8 @@ class SetLocaleFromSession
     {
         if ($request->session()->has('locale')) {
             App::setLocale($request->session()->get('locale'));
+            \Illuminate\Support\Facades\Log::info('Locale set to: ' . $request->session()->get('locale'));
+    
         }
 
         return $next($request);
