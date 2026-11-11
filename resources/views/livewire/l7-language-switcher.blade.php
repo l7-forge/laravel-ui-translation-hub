@@ -39,10 +39,13 @@ new class extends Component {
         if ($exists) {
             Cache::forget("lang_json_{$locale}");
 
-            session()->put('locale', $locale);
+            // Sprache sauber in der Session speichern und persistieren
+            session(['locale' => $locale]);
             session()->save(); 
+            
             app()->setLocale($locale);
             
+            // Seite neu laden, damit die Session/Middleware greift
             $this->js('window.location.reload();');
         }
     }
@@ -76,3 +79,4 @@ new class extends Component {
         @endforeach
     </select>
 </div>
+```[cite: 5]
