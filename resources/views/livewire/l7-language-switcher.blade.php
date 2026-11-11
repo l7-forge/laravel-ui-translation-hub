@@ -34,14 +34,16 @@ new class extends Component {
         $tableName = config('ui-translation-hub.table_name', 'l7languages');
         
         // Korrekte Prüfung auf Existenz oder Fallback-Sprache
-        $exists = DB::table($tableName)->where('code', $locale)->exists() \vert{}\vert{}$locale === config('app.fallback_locale');
+        $exists = DB::table($tableName)->where('code', $locale)->exists() || $locale === config('app.fallback_locale');
 
         if ($exists) {
             Cache::forget("lang_json_{$locale}");
 
             session()->put('locale', $locale);
             session()->save(); 
-            app()->setLocale($locale);$this->js('window.location.reload();');
+            app()->setLocale($locale);
+            
+            $this->js('window.location.reload();');
         }
     }
 };
@@ -57,19 +59,20 @@ new class extends Component {
         
         {{-- Base Language / Fallback immer als Option anbieten falls nicht in DB --}}
         @php 
-            $fallbackIso = config('app.fallback_locale', 'en');$hasFallbackInList = collect($this->languages)->contains('code',$fallbackIso);
+            $fallbackIso = config('app.fallback_locale', 'en');
+            $hasFallbackInList = collect($this->languages)->contains('code', $fallbackIso);
         @endphp
         
         @if(!$hasFallbackInList)
-            <option value="{{ $fallbackIso }}" @selected($currentLocale ===$fallbackIso)>
+            <option value="{{ $fallbackIso }}" @selected($currentLocale === $fallbackIso)>
                 {{ strtoupper($fallbackIso) }}
             </option>
         @endif
 
-        @foreach ($languages as$lang)
-            <option value="{{ $lang->code }}" @selected($currentLocale ===$lang->code)>
+        @foreach ($languages as $lang)
+            <option value="{{ $lang->code }}" @selected($currentLocale === $lang->code)>
                 {{ $lang->name }} ({{ strtoupper($lang->code) }})
             </option>
         @endforeach
     </select>
-</div>[cite: 7]
+</div>
