@@ -34,25 +34,19 @@ new class extends Component {
         $tableName = config('ui-translation-hub.table_name', 'l7languages');
         
         // Kurzer Schutz: Prüfen ob die Sprache (oder die Base-Sprache) existiert/valide ist
-        $exists = DB::table($tableName)->where('code', $locale)->exists() || $locale === config('app.fallback_locale');
+        $exists = DB::table($tableName)->where('code', $locale)->exists() \vert{}\vert{}$locale === config('app.fallback_locale');
 
         if ($exists) {
             // Cache für die gewählte Sprache leeren, damit alles frisch geladen wird
+            Cache::forget("lang_json_{$locale}");
 
-             Cache::forget("lang_json_{$locale}");
-
-                session()->put('locale', $locale);
-                session()->save(); // Sicherstellen, dass die Session sofort geschrieben wird
-                app()->setLocale($locale);
-
-            // Cache::forget("lang_json_{$locale}");
-
-            // Session::put('locale', $locale);
-            // App::setLocale($locale);
-            // session()->save();
+            session()->put('locale', $locale);
+            session()->save(); // Sicherstellen, dass die Session sofort geschrieben wird
+            app()->setLocale($locale);
             
-            // Seite neu laden, damit alle UI-Skelette die neue Übersetzung annehmen
-            return $this->redirect(request()->header('Referer', '/'), navigate: false);
+            // Erzwingt einen echten, synchronen Browser-Reload, damit die 
+            // Laravel-Middleware die neue Session beim nächsten Request zuverlässig greift
+            $this->js('window.location.reload();');
         }
     }
 };
@@ -68,18 +62,17 @@ new class extends Component {
         
         {{-- Base Language / Fallback immer als Option anbieten falls nicht in DB --}}
         @php 
-            $fallbackIso = config('app.fallback_locale', 'en');
-            $hasFallbackInList = collect($this->languages)->contains('code', $fallbackIso);
+            $fallbackIso = config('app.fallback_locale', 'en');$hasFallbackInList = collect($this->languages)->contains('code',$fallbackIso);
         @endphp
         
         @if(!$hasFallbackInList)
-            <option value="{{ $fallbackIso }}" @selected($currentLocale === $fallbackIso)>
+            <option value="{{ $fallbackIso }}" @selected($currentLocale ===$fallbackIso)>
                 {{ strtoupper($fallbackIso) }}
             </option>
         @endif
 
-        @foreach ($languages as $lang)
-            <option value="{{ $lang->code }}" @selected($currentLocale === $lang->code)>
+        @foreach ($languages as$lang)
+            <option value="{{ $lang->code }}" @selected($currentLocale ===$lang->code)>
                 {{ $lang->name }} ({{ strtoupper($lang->code) }})
             </option>
         @endforeach
