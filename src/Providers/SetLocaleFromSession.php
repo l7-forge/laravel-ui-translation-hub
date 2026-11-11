@@ -1,17 +1,16 @@
 <?php
-namespace L7Labs\LaravelUiTranslationHub\Middleware;
+namespace L7Labs\LaravelUiTranslationHub\Providers;
 
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
-use Illuminate\Support\Facades\Session;
 
 class SetLocaleFromSession
 {
     public function handle(Request $request, Closure $next)
     {
-        if (Session::has('locale')) {
-            App::setLocale(Session::get('locale'));
+        if ($request->session()->has('locale')) {
+            App::setLocale($request->session()->get('locale'));
         }
 
         return $next($request);
