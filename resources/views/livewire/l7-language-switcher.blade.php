@@ -79,4 +79,3 @@ new class extends Component {
         @endforeach
     </select>
 </div>
-```[cite: 5]
