@@ -793,19 +793,7 @@ new class extends Component {
                         </div>
                     </div>
 
-                    <div class="text-[10px] italic text-[#9da4af] pt-2 border-t border-[#374151]">
-                        {{-- Progress Bar --}}
-                    <div class="space-y-2">
-                        <div class="w-full bg-[#0c0b16] rounded-full h-3 border border-[#374151] overflow-hidden p-0.5">
-                            <div class="bg-[#4f46e5] h-full rounded-full transition-all duration-300" style="width: {{ $percent }}%;"></div>
-                        </div>
-                        <div class="flex justify-between text-[10px] font-mono text-[#9da4af]">
-                            <span>{{ $completed }} / {{ $totalQueueCount }} {{ __t('Processed') }}</span>
-                            <span class="font-bold text-white">{{ $percent }}%</span>
-                        </div>
-                    </div>
-
-                    {{-- Neu: Verbrauchte Chars (Amber) & Remaining Kontingent (Grün/Weiß) in einer Zeile --}}
+                    {{-- Metriken: Batch-Verbrauch & Verbleibendes Kontingent in einer Zeile --}}
                     <div class="flex items-center justify-between pt-3 border-t border-[#374151] text-[10px] font-mono">
                         <div>
                             <span class="text-[#9da4af]">Batch-Verbrauch:</span>
@@ -816,7 +804,6 @@ new class extends Component {
                             <span class="text-[#10b981] font-black ml-1">{{ $wordBalance }}</span>
                             <span class="text-white ml-0.5">remaining</span>
                         </div>
-                    </div>
                     </div>
                 </div>
             </div>
