@@ -14,6 +14,7 @@ new class extends Component {
     public $targetLanguageData = [];
     public $availableLocales = [];
     public $filter = 'all';
+    public $search = '';
 
     public $languagesTable;
 
@@ -40,7 +41,7 @@ new class extends Component {
     public $missingQueue = [];
     public $totalQueueCount = 0;
     public $remainingTranslations = 0;
-    public $batchCharsTranslated = 0; // Neu: Zählt die übersetzten Zeichen dieses Runs
+    public $batchCharsTranslated = 0;
 
     protected function getConfigPath()
     {
@@ -376,7 +377,7 @@ new class extends Component {
                 $hexResult = $responseData['translation_hex'];
 
                 $this->targetLanguageData[$hexKey] = $hexResult;
-    // Neu: Zeichen des Source-Keys mitzählen (Länge des dekodierten Strings)
+
                 $sourceText = hex2bin($hexKey);
                 $this->batchCharsTranslated += mb_strlen($sourceText);
 
@@ -440,7 +441,7 @@ new class extends Component {
 
         $this->totalQueueCount = count($this->missingQueue);
         $this->remainingTranslations = $this->totalQueueCount;
-        $this->batchCharsTranslated = 0; // Neu: Reset
+        $this->batchCharsTranslated = 0;
 
         if ($this->totalQueueCount > 0) {
             $this->isTranslatingAll = true;
@@ -594,7 +595,7 @@ new class extends Component {
                     <div>
                         <div class="text-[10px] font-bold uppercase tracking-wider text-[#9da4af] mb-1">&rarr; Request URL & Method</div>
                         <div class="bg-[#0c0b16] p-3 rounded border border-[#374151] text-xs font-mono text-[#4f46e5] break-all">
-                            <span class="font-bold uppercase">[{{ $lastApiInspect['request']['method'] ?? 'POST' }}]</span> {{ $lastApiInspect['request']['url'] ?? '' }}
+                            <span class="font-bold uppercase">[{{ $lastApiInspect['request']['method'] ?? 'POST' }}]</span> {{$lastApiInspect['request']['url'] ?? '' }}
                         </div>
                     </div>
 
@@ -637,7 +638,7 @@ new class extends Component {
             <div class="flex items-center gap-4">
                 @if ($autoTranslateEnabled)
                     <button type="button" wire:click="startTranslateAll"
-                        @if (empty($availableLocales) || $isTranslatingAll) disabled @endif
+                        @if (empty($availableLocales) ||$isTranslatingAll) disabled @endif
                         class="text-[10px] font-bold px-3 py-3 rounded-sm uppercase bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
                         <span>Translate All Missing</span>
                     </button>
@@ -648,6 +649,9 @@ new class extends Component {
                     <option value="all">{{ __t('Show All') }}</option>
                     <option value="missing">{{ __t('Missing Only') }}</option>
                 </select>
+
+                <input type="text" wire:model.live.debounce.300ms="search" placeholder="{{ __t('Search source or target...') }}"
+                    class="px-3 py-1.5 rounded-sm text-[10px] font-mono bg-[#0c0b16] border border-[#374151] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none w-52" />
             </div>
 
             <div class="flex items-center gap-2">
@@ -657,7 +661,7 @@ new class extends Component {
                     @if (empty($availableLocales))
                         <option value="">{{ __t('No Languages') }}</option>
                     @else
-                        @foreach ($availableLocales as $code => $name)
+                        @foreach ($availableLocales as $code =>$name)
                             <option value="{{ $code }}">{{ strtoupper($code) }} - {{ __t($name) }}</option>
                         @endforeach
                     @endif
@@ -710,11 +714,15 @@ new class extends Component {
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-[#374151]">
-                    @foreach ($baseLanguageData as $key => $value)
-                        @if ($filter == 'all' || !isset($targetLanguageData[$key]))
-                            @php
-                                $targetText = isset($targetLanguageData[$key]) ? hex2bin($targetLanguageData[$key]) : '';
-                            @endphp
+                    @foreach ($baseLanguageData as $key =>$value)
+                        @php
+                            $sourceText = hex2bin($key);$targetText = isset($targetLanguageData[$key]) ? hex2bin($targetLanguageData[$key]) : '';
+                            $matchesFilter = ($filter == 'all' || !isset($targetLanguageData[$key]));
+                            $matchesSearch = empty($search) ||
+                                str_contains(mb_strtolower($sourceText), mb_strtolower($search)) ||
+                                str_contains(mb_strtolower($targetText), mb_strtolower($search));
+                        @endphp
+                        @if ($matchesFilter &&$matchesSearch)
                             <tr wire:key="row-{{ $key }}" class="hover:bg-[#080e20]/60 transition-colors">
                                 <td class="p-3 text-center align-top">
                                     <button type="button" wire:click="deleteIndex('{{ $key }}')"
@@ -728,12 +736,12 @@ new class extends Component {
                                 </td>
 
                                 <td class="p-3 align-top">
-                                    <textarea rows="2" disabled class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#9da4af] focus:outline-none resize-y min-h-[42px] cursor-not-allowed opacity-90">{{ hex2bin($key) }}</textarea>
+                                    <textarea rows="2" disabled class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#9da4af] focus:outline-none resize-y min-h-[42px] cursor-not-allowed opacity-90">{{ $sourceText }}</textarea>
                                 </td>
 
                                 <td class="p-3 align-top" wire:key="translation-cell-{{ $key }}">
                                     <div class="flex gap-2 items-start w-full">
-                                        <textarea id="textarea-{{ $key }}" wire:key="textarea-{{ $key }}" rows="2" wire:change="saveKey('{{ $key }}', $event.target.value)" class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none resize-y min-h-[42px]">{{ $targetText }}</textarea>
+                                        <textarea id="textarea-{{ $key }}" wire:key="textarea-{{ $key }}" rows="2" wire:change="saveKey('{{ $key }}',$event.target.value)" class="w-full text-[13px] p-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none resize-y min-h-[42px]">{{ $targetText }}</textarea>
 
                                         <div class="flex flex-col gap-1 shrink-0">
                                             @if ($autoTranslateEnabled)
@@ -748,7 +756,7 @@ new class extends Component {
                                             @endif
 
                                             <button type="button"
-                                                onclick="const el = document.getElementById('textarea-{{ $key }}'); @this.saveKey('{{ $key }}', el.value);"
+                                                onclick="const el = document.getElementById('textarea-{{ $key }}'); @this.saveKey('{{$key }}', el.value);"
                                                 class="flex items-center justify-center rounded-sm p-1.5 w-8 h-8 bg-[#080e20] border border-[#374151] text-[#9da4af] hover:border-[#10b981] hover:bg-[#10b981]/20 hover:text-[#10b981] transition-colors cursor-pointer shadow-sm"
                                                 title="Save">
                                                 ✓
@@ -766,8 +774,8 @@ new class extends Component {
         {{-- Progress Modal for Translate All --}}
         @if ($isTranslatingAll)
             @php
-                $completed = $totalQueueCount - $remainingTranslations;
-                $percent = $totalQueueCount > 0 ? round(($completed / $totalQueueCount) * 100) : 0;
+                $completed = $totalQueueCount -$remainingTranslations;
+                $percent =$totalQueueCount > 0 ? round(($completed / $totalQueueCount) * 100) : 0;
             @endphp
             <div class="fixed inset-0 z-50 flex items-center justify-center bg-[#010413]/90 backdrop-blur-xs p-4">
                 <div class="bg-[#080e20] border border-[#374151] rounded-sm w-full max-w-md p-6 shadow-2xl text-center space-y-4">
@@ -788,12 +796,11 @@ new class extends Component {
                             <div class="bg-[#4f46e5] h-full rounded-full transition-all duration-300" style="width: {{ $percent }}%;"></div>
                         </div>
                         <div class="flex justify-between text-[10px] font-mono text-[#9da4af]">
-                            <span>{{ $completed }} / {{ $totalQueueCount }} {{ __t('Processed') }}</span>
+                            <span>{{ $completed }} / {{$totalQueueCount }} {{ __t('Processed') }}</span>
                             <span class="font-bold text-white">{{ $percent }}%</span>
                         </div>
                     </div>
 
-                    {{-- Metriken: Batch-Verbrauch & Verbleibendes Kontingent in einer Zeile --}}
                     <div class="flex items-center justify-between pt-3 border-t border-[#374151] text-[10px] font-mono">
                         <div>
                             <span class="text-[#9da4af]">Batch-Verbrauch:</span>
@@ -819,75 +826,4 @@ new class extends Component {
                         <div>
                             <label class="text-[9px] font-bold uppercase text-[#9da4af] block mb-1">Language Name</label>
                             <input type="text" wire:model="newLanguageName" placeholder="e.g. Spanish"
-                                class="text-xs px-3 py-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none w-full" />
-                        </div>
-                        <div>
-                            <label class="text-[9px] font-bold uppercase text-[#9da4af] block mb-1">ISO Code</label>
-                            <input type="text" wire:model="newLanguageIso" placeholder="e.g. es" maxlength="5"
-                                class="text-xs px-3 py-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none w-full uppercase" />
-                        </div>
-                        @if ($errorMessage)
-                            <div class="text-[10px] text-[#f43f5e] font-bold uppercase">⚠️ {{ $errorMessage }}</div>
-                        @endif
-                    </div>
-                    <div class="flex justify-end gap-2 pt-3 border-t border-[#374151]">
-                        <button type="button" wire:click="$set('showAddForm', false)"
-                            class="text-[10px] font-bold px-3 py-2 rounded-sm uppercase bg-[#1c1a2e] text-white hover:bg-[#374151] transition-colors">Cancel</button>
-                        <button type="button" wire:click="addNewLanguage"
-                            class="text-[10px] font-bold px-4 py-2 rounded-sm uppercase bg-[#10b981] hover:bg-[#059669] text-white transition-colors">Save</button>
-                    </div>
-                </div>
-            </div>
-        @endif
-
-        {{-- API Key Modal --}}
-        @if ($showApiKeyModal)
-            <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs">
-                <div class="bg-[#161426] border border-[#374151] rounded-sm w-full max-w-md p-6 shadow-2xl font-sans">
-                    <div class="text-sm font-black uppercase tracking-wider text-white mb-2">
-                        {{ __t('L7 Translation Hub Cloud-Setup') }}
-                    </div>
-
-                    <p class="text-[11px] text-[#9da4af] mb-4 leading-relaxed">
-                        {{ __t('Enter your API Key to enable automatic cloud translation.') }}
-                    </p>
-
-                    <div
-                        class="mb-5 p-3 rounded-sm bg-[#080e20] border border-[#374151] flex items-center justify-between gap-3">
-                        <div class="flex flex-col">
-                            <span
-                                class="text-[10px] font-bold text-white uppercase">{{ __t("Don't have a Key?") }}</span>
-                            <span
-                                class="text-[9px] text-[#9da4af]">{{ __t('Register for Free & Secure Your Quota.') }}</span>
-                        </div>
-                        <a href="{{ rtrim($apiUrl, '/') }}/register" target="_blank" rel="noopener noreferrer"
-                            class="link shrink-0 text-[10px] font-black uppercase px-3 py-1.5 rounded-sm bg-[#4f46e5] hover:bg-indigo-500 text-white transition-colors shadow-sm">
-                            &rarr; {{ __t('Get Free Key') }}
-                        </a>
-                    </div>
-
-                    <div class="flex flex-col gap-1 mb-5">
-                        <label class="text-[9px] font-bold uppercase text-[#9da4af]">{{ __t('Your API Key') }}</label>
-                        <input type="password" wire:model="apiKeyInput" placeholder="l7_live_..."
-                            class="text-xs px-3 py-2 rounded-sm border border-[#374151] bg-[#0c0b16] text-[#f8fafc] focus:border-[#4f46e5] focus:outline-none w-full" />
-                        @if ($apiErrorMessage)
-                            <span class="text-[10px] text-[#f43f5e] font-bold uppercase mt-1">⚠️
-                                {{ $apiErrorMessage }}</span>
-                        @endif
-                    </div>
-
-                    <div class="flex justify-end gap-2 pt-3 border-t border-[#374151]">
-                        <button type="button" wire:click="$set('showApiKeyModal', false)"
-                            class="text-[10px] font-bold px-3 py-2 rounded-sm uppercase bg-[#1c1a2e] hover:bg-[#374151] text-white transition-colors">
-                            {{ __t('Cancel') }}
-                        </button>
-                        <button type="button" wire:click="verifyAndEnableApi"
-                            class="text-[10px] font-bold px-4 py-2 rounded-sm uppercase bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shadow-sm">
-                            {{ __t('Verify & Enable') }}
-                        </button>
-                    </div>
-                </div>
-            </div>
-        @endif
-    </div>
-</div>
+                                class="text-xs px-3 py-2 rounded-sm border border-[#374151] bg-[#0

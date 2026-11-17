@@ -13,6 +13,12 @@ class SetLocaleFromSession
             App::setLocale($request->session()->get('locale'));
             \Illuminate\Support\Facades\Log::info('Locale set to: ' . $request->session()->get('locale'));
     
+        }else {
+            $fallbackLocale = config('app.fallback_locale');
+            App::setLocale($fallbackLocale);
+            
+            $request->session()->put('locale', $fallbackLocale);
+
         }
 
         return $next($request);
