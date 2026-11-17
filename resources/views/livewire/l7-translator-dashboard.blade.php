@@ -40,6 +40,7 @@ new class extends Component {
     public $missingQueue = [];
     public $totalQueueCount = 0;
     public $remainingTranslations = 0;
+    public $batchCharsTranslated = 0; // Neu: Zählt die übersetzten Zeichen dieses Runs
 
     protected function getConfigPath()
     {
@@ -375,6 +376,9 @@ new class extends Component {
                 $hexResult = $responseData['translation_hex'];
 
                 $this->targetLanguageData[$hexKey] = $hexResult;
+    // Neu: Zeichen des Source-Keys mitzählen (Länge des dekodierten Strings)
+                $sourceText = hex2bin($hexKey);
+                $this->batchCharsTranslated += mb_strlen($sourceText);
 
                 if ($autoSave) {
                     $this->persistData();
@@ -436,6 +440,7 @@ new class extends Component {
 
         $this->totalQueueCount = count($this->missingQueue);
         $this->remainingTranslations = $this->totalQueueCount;
+        $this->batchCharsTranslated = 0; // Neu: Reset
 
         if ($this->totalQueueCount > 0) {
             $this->isTranslatingAll = true;
@@ -789,7 +794,29 @@ new class extends Component {
                     </div>
 
                     <div class="text-[10px] italic text-[#9da4af] pt-2 border-t border-[#374151]">
-                        {{ __t('Remaining items') }}: <span class="font-mono text-indigo-400 font-bold">{{ $remainingTranslations }}</span>
+                        {{-- Progress Bar --}}
+                    <div class="space-y-2">
+                        <div class="w-full bg-[#0c0b16] rounded-full h-3 border border-[#374151] overflow-hidden p-0.5">
+                            <div class="bg-[#4f46e5] h-full rounded-full transition-all duration-300" style="width: {{ $percent }}%;"></div>
+                        </div>
+                        <div class="flex justify-between text-[10px] font-mono text-[#9da4af]">
+                            <span>{{ $completed }} / {{ $totalQueueCount }} {{ __t('Processed') }}</span>
+                            <span class="font-bold text-white">{{ $percent }}%</span>
+                        </div>
+                    </div>
+
+                    {{-- Neu: Verbrauchte Chars (Amber) & Remaining Kontingent (Grün/Weiß) in einer Zeile --}}
+                    <div class="flex items-center justify-between pt-3 border-t border-[#374151] text-[10px] font-mono">
+                        <div>
+                            <span class="text-[#9da4af]">Batch-Verbrauch:</span>
+                            <span class="text-[#f59e0b] font-black ml-1">+{{ number_format($batchCharsTranslated) }} Chars</span>
+                        </div>
+                        <div>
+                            <span class="text-[#9da4af]">Kontingent:</span>
+                            <span class="text-[#10b981] font-black ml-1">{{ $wordBalance }}</span>
+                            <span class="text-white ml-0.5">remaining</span>
+                        </div>
+                    </div>
                     </div>
                 </div>
             </div>
