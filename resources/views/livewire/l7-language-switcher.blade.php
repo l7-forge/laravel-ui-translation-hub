@@ -1,5 +1,11 @@
 <?php
-
+/**
+ * Package: l7-forge / laravel-ui-translation-hub
+ * Author: Lars Wendt (L7-Labs)
+ * Copyright (c) 2026. All rights reserved.
+ * 
+ * Notice: Unauthorized redistribution or adaptation for third-party backends is strictly prohibited.
+ */
 use Livewire\Volt\Component;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Session;

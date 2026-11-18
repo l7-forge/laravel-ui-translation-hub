@@ -1,0 +1,20 @@
+Copyright (c) 2026 Lars Wendt (WentecSoft / l7-forge). All rights reserved.
+
+PERMITTED USE:
+You are permitted to download, install, and publish this software package ("l7-forge/laravel-ui-translation-hub") 
+within your own proprietary or commercial Laravel applications solely for the purpose of utilizing the 
+official l7-forge translation infrastructure and API services. You may modify the published views and 
+components locally to match your application's design system.
+
+RESTRICTIONS:
+1. You are strictly prohibited from redistributing, sublicensing, renting, or reselling this software package, 
+   or any derivative works thereof, as a standalone product, component library, or competing package on 
+   Packagist, GitHub, or any other public or private repository.
+2. You are strictly prohibited from removing or altering copyright notices, brand references, or author attributions 
+   contained within the source code files.
+3. You are strictly prohibited from rewiring, redirecting, or reverse-engineering this dashboard interface 
+   to interface with third-party translation APIs or unauthorized backend servers without explicit written consent 
+   from the author.
+
+DISCLAIMER:
+THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.
