@@ -49,6 +49,7 @@ new class extends Component {
     public $totalQueueCount = 0;
     public $remainingTranslations = 0;
     public $batchCharsTranslated = 0;
+    public array $failedQueue = [];
 
     protected function getConfigPath()
     {
@@ -440,8 +441,13 @@ new class extends Component {
     public function startTranslateAll()
     {
         $this->missingQueue = [];
+        $this->failedQueue = [];
+
         foreach ($this->baseLanguageData as $hexKey => $value) {
-            if (!isset($this->targetLanguageData[$hexKey]) || empty(hex2bin($this->targetLanguageData[$hexKey]))) {
+            $targetHex = $this->targetLanguageData[$hexKey] ?? '';
+            $decodedTarget = $targetHex !== '' ? hex2bin((string) $targetHex) : false;
+
+            if ($targetHex === '' || $decodedTarget === false || $decodedTarget === '') {
                 $this->missingQueue[] = $hexKey;
             }
         }
@@ -463,18 +469,24 @@ new class extends Component {
             return;
         }
 
-        if (empty($this->missingQueue)) {
+        if (empty($this->missingQueue) || !$this->autoTranslateEnabled) {
             $this->finishBatchTranslation();
             return;
         }
 
         $hexKey = array_shift($this->missingQueue);
-        
-        $this->requestTranslation($hexKey, false);
+        $beforeValue = $this->targetLanguageData[$hexKey] ?? null;
+
+        $this->requestTranslation($hexKey, true);
+
+        $afterValue = $this->targetLanguageData[$hexKey] ?? null;
+        if (empty($afterValue) || $afterValue === $beforeValue) {
+            $this->failedQueue[] = $hexKey;
+        }
 
         $this->remainingTranslations = count($this->missingQueue);
 
-        if ($this->remainingTranslations > 0) {
+        if ($this->remainingTranslations > 0 && $this->autoTranslateEnabled) {
             $this->dispatch('process-next');
         } else {
             $this->finishBatchTranslation();
@@ -485,9 +497,11 @@ new class extends Component {
     {
         $this->isTranslatingAll = false;
         $this->remainingTranslations = 0;
-        
+
         $this->persistData();
-        $this->targetLanguageData = $this->loadIso($this->targetLocaleIso);
+        if ($this->targetLocaleIso) {
+            $this->targetLanguageData = $this->loadIso($this->targetLocaleIso);
+        }
     }
 
     //------------------------------------------------------------------------------------------------------------
