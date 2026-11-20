@@ -156,7 +156,7 @@ new class extends Component {
             if ($response->successful() && ($responseData['status'] ?? '') === 'success') {
                 $this->autoTranslateEnabled = true;
                 $this->wordBalance = $responseData['remaining_balance'] ?? 0;
-                
+
                 $configData['last_known_quota'] = $this->wordBalance;
                 $configData['project_name'] = $responseData['project'] ?? 'Standard Project';
                 $configData['status'] = 'active';
@@ -171,7 +171,7 @@ new class extends Component {
         }
     }
 
-    //------------------------------------------------------------------------------------------------------------//
+    //------------------------------------------------------------------------------------------------------------
 
     public function toggleApi()
     {
@@ -205,7 +205,7 @@ new class extends Component {
                 ]);
 
             $durationMs = (int) round((microtime(true) - $startTime) * 1000);
-            
+
             $responseData = $response->json();
             if ($responseData === null) {
                 $responseData = ['raw_output' => $response->body()];
@@ -280,7 +280,7 @@ new class extends Component {
     public function disableApi()
     {
         session()->forget('UI_TRANSLATION_HUB_API_KEY');
-        
+
         $configData = $this->readHubConfig();
         $configData['api_key'] = '';
         $configData['status'] = 'inactive';
@@ -476,7 +476,7 @@ new class extends Component {
 
         $hexKey = (string) array_shift($this->missingQueue);
 
-        $this->requestTranslation($hexKey, true);
+        $this->requestTranslation($hexKey, false);
 
         if (empty($this->targetLanguageData[$hexKey])) {
             $this->failedQueue[] = $hexKey;
@@ -502,6 +502,8 @@ new class extends Component {
             $this->dispatch('process-next');
             return;
         }
+
+        $this->persistData();
 
         $this->isTranslatingAll = false;
         $this->remainingTranslations = 0;
