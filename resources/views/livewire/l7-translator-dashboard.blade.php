@@ -950,4 +950,3 @@ new class extends Component {
         @endif
     </div>
 </div>
-```[cite: 3]
