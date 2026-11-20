@@ -171,7 +171,7 @@ new class extends Component {
         }
     }
 
-    //------------------------------------------------------------------------------------------------------------
+    //------------------------------------------------------------------------------------------------------------//
 
     public function toggleApi()
     {
@@ -345,6 +345,8 @@ new class extends Component {
             $apiKey = $configData['api_key'] ?? '';
         }
 
+        $hexKey = (string) $hexKey;
+
         $payloadData = [
             'api_key' => $apiKey,
             'from_code' => $this->baseLocaleIso,
@@ -384,12 +386,8 @@ new class extends Component {
             }
 
             if ($response->successful() && isset($responseData['translation_hex'])) {
-                $hexResult = $responseData['translation_hex'];
-
-                $this->targetLanguageData[$hexKey] = $hexResult;
-
-                $sourceText = hex2bin($hexKey);
-                $this->batchCharsTranslated += mb_strlen($sourceText);
+                $this->targetLanguageData[$hexKey] = (string) $responseData['translation_hex'];
+                $this->batchCharsTranslated += mb_strlen((string) hex2bin($hexKey));
 
                 if ($autoSave) {
                     $this->persistData();
@@ -448,10 +446,8 @@ new class extends Component {
         $this->retryTotalCount = 0;
 
         foreach ($this->baseLanguageData as $hexKey => $value) {
-            $targetHex = $this->targetLanguageData[$hexKey] ?? '';
-            $decodedTarget = $targetHex !== '' ? hex2bin((string) $targetHex) : false;
-
-            if ($targetHex === '' || $decodedTarget === false || $decodedTarget === '') {
+            $hexKey = (string) $hexKey;
+            if (empty($this->targetLanguageData[$hexKey])) {
                 $this->missingQueue[] = $hexKey;
             }
         }
@@ -478,13 +474,11 @@ new class extends Component {
             return;
         }
 
-        $hexKey = array_shift($this->missingQueue);
+        $hexKey = (string) array_shift($this->missingQueue);
 
         $this->requestTranslation($hexKey, true);
 
-        $targetHex = $this->targetLanguageData[$hexKey] ?? '';
-        $decodedTarget = $targetHex !== '' ? hex2bin((string) $targetHex) : false;
-        if ($targetHex === '' || $decodedTarget === false || $decodedTarget === '') {
+        if (empty($this->targetLanguageData[$hexKey])) {
             $this->failedQueue[] = $hexKey;
         }
 
@@ -499,8 +493,6 @@ new class extends Component {
 
     private function finishBatchTranslation()
     {
-        $this->persistData();
-
         if (!empty($this->failedQueue) && $this->retryPasses < 3 && $this->autoTranslateEnabled) {
             $this->retryPasses++;
             $this->missingQueue = $this->failedQueue;
@@ -516,10 +508,6 @@ new class extends Component {
         $this->failedQueue = [];
         $this->retryPasses = 0;
         $this->retryTotalCount = 0;
-
-        if ($this->targetLocaleIso) {
-            $this->targetLanguageData = $this->loadIso($this->targetLocaleIso);
-        }
     }
 
     //------------------------------------------------------------------------------------------------------------
@@ -846,9 +834,10 @@ new class extends Component {
                             <span>{{ $completed }} / {{ $totalQueueCount }} {{ __t('Processed') }}</span>
                             <span class="font-bold text-white">{{ $percent }}%</span>
                         </div>
+
                         @if ($retryPasses > 0)
-                            <div class="text-[10px] font-mono text-[#f59e0b] font-bold pt-1">
-                                Retry {{ $retryPasses }} / 3: {{ $retryCurrent }} von {{ $retryTotalCount }} wird erneut angefragt...
+                            <div class="px-3 py-2 rounded-sm bg-[#f59e0b]/10 border border-[#f59e0b]/40 text-[10px] font-mono text-[#f59e0b] font-bold">
+                                Recovery Active · Retry {{ $retryPasses }} / 3 ({{ $retryCurrent }} von {{ $retryTotalCount }})
                             </div>
                         @endif
                     </div>
