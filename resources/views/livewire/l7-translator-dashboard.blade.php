@@ -50,6 +50,8 @@ new class extends Component {
     public $remainingTranslations = 0;
     public $batchCharsTranslated = 0;
     public array $failedQueue = [];
+    public int $retryPasses = 0;
+    public int $retryTotalCount = 0;
 
     protected function getConfigPath()
     {
@@ -354,7 +356,7 @@ new class extends Component {
         $fullEndpoint = rtrim($this->apiUrl, '/') . '/translate';
 
         try {
-            $response = Http::timeout(10)->acceptJson()->asJson()->post($fullEndpoint, $payloadData);
+            $response = Http::timeout(30)->acceptJson()->asJson()->post($fullEndpoint, $payloadData);
 
             $durationMs = (int) round((microtime(true) - $startTime) * 1000);
             $httpCode = $response->status();
@@ -442,6 +444,8 @@ new class extends Component {
     {
         $this->missingQueue = [];
         $this->failedQueue = [];
+        $this->retryPasses = 0;
+        $this->retryTotalCount = 0;
 
         foreach ($this->baseLanguageData as $hexKey => $value) {
             $targetHex = $this->targetLanguageData[$hexKey] ?? '';
@@ -475,12 +479,12 @@ new class extends Component {
         }
 
         $hexKey = array_shift($this->missingQueue);
-        $beforeValue = $this->targetLanguageData[$hexKey] ?? null;
 
         $this->requestTranslation($hexKey, true);
 
-        $afterValue = $this->targetLanguageData[$hexKey] ?? null;
-        if (empty($afterValue) || $afterValue === $beforeValue) {
+        $targetHex = $this->targetLanguageData[$hexKey] ?? '';
+        $decodedTarget = $targetHex !== '' ? hex2bin((string) $targetHex) : false;
+        if ($targetHex === '' || $decodedTarget === false || $decodedTarget === '') {
             $this->failedQueue[] = $hexKey;
         }
 
@@ -495,10 +499,24 @@ new class extends Component {
 
     private function finishBatchTranslation()
     {
+        $this->persistData();
+
+        if (!empty($this->failedQueue) && $this->retryPasses < 3 && $this->autoTranslateEnabled) {
+            $this->retryPasses++;
+            $this->missingQueue = $this->failedQueue;
+            $this->failedQueue = [];
+            $this->retryTotalCount = count($this->missingQueue);
+            $this->remainingTranslations = $this->retryTotalCount;
+            $this->dispatch('process-next');
+            return;
+        }
+
         $this->isTranslatingAll = false;
         $this->remainingTranslations = 0;
+        $this->failedQueue = [];
+        $this->retryPasses = 0;
+        $this->retryTotalCount = 0;
 
-        $this->persistData();
         if ($this->targetLocaleIso) {
             $this->targetLanguageData = $this->loadIso($this->targetLocaleIso);
         }
@@ -796,8 +814,15 @@ new class extends Component {
         {{-- Progress Modal for Translate All --}}
         @if ($isTranslatingAll)
             @php
-                $completed = $totalQueueCount - $remainingTranslations;
-                $percent = $totalQueueCount > 0 ? round(($completed / $totalQueueCount) * 100) : 0;
+                if ($retryPasses > 0) {
+                    $completed = $totalQueueCount;
+                    $percent = 100;
+                    $retryCurrent = max(1, $retryTotalCount - $remainingTranslations + 1);
+                } else {
+                    $completed = $totalQueueCount - $remainingTranslations;
+                    $percent = $totalQueueCount > 0 ? round(($completed / $totalQueueCount) * 100) : 0;
+                    $retryCurrent = 0;
+                }
             @endphp
             <div class="fixed inset-0 z-50 flex items-center justify-center bg-[#010413]/90 backdrop-blur-xs p-4">
                 <div class="bg-[#080e20] border border-[#374151] rounded-sm w-full max-w-md p-6 shadow-2xl text-center space-y-4">
@@ -821,6 +846,11 @@ new class extends Component {
                             <span>{{ $completed }} / {{ $totalQueueCount }} {{ __t('Processed') }}</span>
                             <span class="font-bold text-white">{{ $percent }}%</span>
                         </div>
+                        @if ($retryPasses > 0)
+                            <div class="text-[10px] font-mono text-[#f59e0b] font-bold pt-1">
+                                Retry {{ $retryPasses }} / 3: {{ $retryCurrent }} von {{ $retryTotalCount }} wird erneut angefragt...
+                            </div>
+                        @endif
                     </div>
 
                     <div class="flex items-center justify-between pt-3 border-t border-[#374151] text-[10px] font-mono">
@@ -920,3 +950,4 @@ new class extends Component {
         @endif
     </div>
 </div>
+```[cite: 3]
