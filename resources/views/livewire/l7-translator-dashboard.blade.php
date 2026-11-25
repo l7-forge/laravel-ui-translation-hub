@@ -183,6 +183,7 @@ new class extends Component {
         $this->wordBalance = '---';
     }
 
+
     //------------------------------------------------------------------------------------------------------------
 
     public function verifyAndEnableApi()
@@ -277,16 +278,6 @@ new class extends Component {
     }
 
     //------------------------------------------------------------------------------------------------------------
-
-    public function disableApi()
-    {
-        $configData = $this->readHubConfig();
-        $configData['status'] = 'inactive';
-        $this->writeHubConfig($configData);
-
-        $this->autoTranslateEnabled = false;
-        $this->wordBalance = '---';
-    }
 
     //------------------------------------------------------------------------------------------------------------
 
