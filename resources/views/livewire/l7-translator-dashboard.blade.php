@@ -173,13 +173,14 @@ new class extends Component {
 
     //------------------------------------------------------------------------------------------------------------
 
-    public function toggleApi()
+    public function disableApi()
     {
-        if ($this->autoTranslateEnabled) {
-            $this->disableApi();
-        } else {
-            $this->showApiKeyModal = true;
-        }
+        $configData = $this->readHubConfig();
+        $configData['status'] = 'inactive';
+        $this->writeHubConfig($configData);
+
+        $this->autoTranslateEnabled = false;
+        $this->wordBalance = '---';
     }
 
     //------------------------------------------------------------------------------------------------------------
@@ -279,16 +280,12 @@ new class extends Component {
 
     public function disableApi()
     {
-        session()->forget('UI_TRANSLATION_HUB_API_KEY');
-
         $configData = $this->readHubConfig();
-        $configData['api_key'] = '';
         $configData['status'] = 'inactive';
         $this->writeHubConfig($configData);
 
         $this->autoTranslateEnabled = false;
         $this->wordBalance = '---';
-        $this->apiKeyInput = '';
     }
 
     //------------------------------------------------------------------------------------------------------------
@@ -334,94 +331,105 @@ new class extends Component {
     //------------------------------------------------------------------------------------------------------------
 
     public function requestTranslation($hexKey, $autoSave = true)
-    {
-        if (!$this->autoTranslateEnabled) {
-            return;
-        }
+        {
+            $this->lastRequestQuotaExceeded = false;
 
-        $apiKey = session('UI_TRANSLATION_HUB_API_KEY');
-        if (empty($apiKey)) {
-            $configData = $this->readHubConfig();
-            $apiKey = $configData['api_key'] ?? '';
-        }
-
-        $hexKey = (string) $hexKey;
-
-        $payloadData = [
-            'api_key' => $apiKey,
-            'from_code' => $this->baseLocaleIso,
-            'to_code' => $this->targetLocaleIso,
-            'source_hex' => $hexKey,
-        ];
-
-        $startTime = microtime(true);
-        $fullEndpoint = rtrim($this->apiUrl, '/') . '/translate';
-
-        try {
-            $response = Http::timeout(30)->acceptJson()->asJson()->post($fullEndpoint, $payloadData);
-
-            $durationMs = (int) round((microtime(true) - $startTime) * 1000);
-            $httpCode = $response->status();
-            $responseData = $response->json() ?? ['raw' => $response->body()];
-
-            if ($this->apiDebugEnabled) {
-                $maskedPayload = $payloadData;
-                if (isset($maskedPayload['api_key'])) {
-                    $maskedPayload['api_key'] = substr($maskedPayload['api_key'], 0, 6) . '...***';
-                }
-
-                $this->lastApiInspect = [
-                    'timestamp' => now()->format('H:i:s.v'),
-                    'status' => $httpCode,
-                    'successful' => $response->successful(),
-                    'duration_ms' => $durationMs,
-                    'request' => [
-                        'method' => 'POST',
-                        'url' => $fullEndpoint,
-                        'payload' => $maskedPayload,
-                    ],
-                    'response' => $responseData,
-                    'error' => $response->failed() ? "HTTP Error {$httpCode}" : null,
-                ];
+            if (!$this->autoTranslateEnabled) {
+                return;
             }
 
-            if ($response->successful() && isset($responseData['translation_hex'])) {
-                $this->targetLanguageData[$hexKey] = (string) $responseData['translation_hex'];
-                $this->batchCharsTranslated += mb_strlen((string) hex2bin($hexKey));
+            $apiKey = session('UI_TRANSLATION_HUB_API_KEY');
+            if (empty($apiKey)) {
+                $configData = $this->readHubConfig();
+                $apiKey = $configData['api_key'] ?? '';
+            }
 
-                if ($autoSave) {
-                    $this->persistData();
+            $hexKey = (string) $hexKey;
+
+            $payloadData = [
+                'api_key' => $apiKey,
+                'from_code' => $this->baseLocaleIso,
+                'to_code' => $this->targetLocaleIso,
+                'source_hex' => $hexKey,
+            ];
+
+            $startTime = microtime(true);
+            $fullEndpoint = rtrim($this->apiUrl, '/') . '/translate';
+
+            try {
+                $response = Http::timeout(30)->acceptJson()->asJson()->post($fullEndpoint, $payloadData);
+
+                $durationMs = (int) round((microtime(true) - $startTime) * 1000);
+                $httpCode = $response->status();
+                $responseData = $response->json() ?? ['raw' => $response->body()];
+
+                if ($this->apiDebugEnabled) {
+                    $maskedPayload = $payloadData;
+                    if (isset($maskedPayload['api_key'])) {
+                        $maskedPayload['api_key'] = substr($maskedPayload['api_key'], 0, 6) . '...***';
+                    }
+
+                    $this->lastApiInspect = [
+                        'timestamp' => now()->format('H:i:s.v'),
+                        'status' => $httpCode,
+                        'successful' => $response->successful(),
+                        'duration_ms' => $durationMs,
+                        'request' => [
+                            'method' => 'POST',
+                            'url' => $fullEndpoint,
+                            'payload' => $maskedPayload,
+                        ],
+                        'response' => $responseData,
+                        'error' => $response->failed() ? "HTTP Error {$httpCode}" : null,
+                    ];
                 }
 
-                $remaining = $responseData['remaining_balance'] ?? null;
-                if ($remaining !== null) {
-                    $this->wordBalance = $remaining;
+                if ($httpCode === 402 || (($responseData['code'] ?? '') === 'QUOTA_EXCEEDED')) {
+                    $this->lastRequestQuotaExceeded = true;
+                    $this->quotaErrorMessage = (string) ($responseData['error'] ?? __t('Quota exceeded. Please top up your balance.'));
+                    $this->wordBalance = 0;
+                    $this->disableApi();
+                    $this->showQuotaModal = true;
+                    return;
+                }
 
-                    if ($remaining <= 0) {
-                        $this->disableApi();
+                if ($response->successful() && isset($responseData['translation_hex'])) {
+                    $this->targetLanguageData[$hexKey] = (string) $responseData['translation_hex'];
+                    $this->batchCharsTranslated += mb_strlen((string) hex2bin($hexKey));
+
+                    if ($autoSave) {
+                        $this->persistData();
+                    }
+
+                    $remaining = $responseData['remaining_balance'] ?? null;
+                    if ($remaining !== null) {
+                        $this->wordBalance = $remaining;
+
+                        if ($remaining <= 0) {
+                            $this->disableApi();
+                        }
                     }
                 }
-            }
-        } catch (\Throwable $e) {
-            $durationMs = (int) round((microtime(true) - $startTime) * 1000);
+            } catch (\Throwable $e) {
+                $durationMs = (int) round((microtime(true) - $startTime) * 1000);
 
-            if ($this->apiDebugEnabled) {
-                $this->lastApiInspect = [
-                    'timestamp' => now()->format('H:i:s'),
-                    'status' => 0,
-                    'successful' => false,
-                    'duration_ms' => $durationMs,
-                    'request' => [
-                        'method' => 'POST',
-                        'url' => $fullEndpoint,
-                        'payload' => $payloadData,
-                    ],
-                    'response' => null,
-                    'error' => $e->getMessage(),
-                ];
+                if ($this->apiDebugEnabled) {
+                    $this->lastApiInspect = [
+                        'timestamp' => now()->format('H:i:s'),
+                        'status' => 0,
+                        'successful' => false,
+                        'duration_ms' => $durationMs,
+                        'request' => [
+                            'method' => 'POST',
+                            'url' => $fullEndpoint,
+                            'payload' => $payloadData,
+                        ],
+                        'response' => null,
+                        'error' => $e->getMessage(),
+                    ];
+                }
             }
         }
-    }
 
     //------------------------------------------------------------------------------------------------------------
 
@@ -477,6 +485,11 @@ new class extends Component {
         $hexKey = (string) array_shift($this->missingQueue);
 
         $this->requestTranslation($hexKey, false);
+
+        if ($this->lastRequestQuotaExceeded || !$this->autoTranslateEnabled) {
+            $this->finishBatchTranslation();
+            return;
+        }
 
         if (empty($this->targetLanguageData[$hexKey])) {
             $this->failedQueue[] = $hexKey;
@@ -885,6 +898,37 @@ new class extends Component {
                             class="text-[10px] font-bold px-3 py-2 rounded-sm uppercase bg-[#1c1a2e] text-white hover:bg-[#374151] transition-colors">Cancel</button>
                         <button type="button" wire:click="addNewLanguage"
                             class="text-[10px] font-bold px-4 py-2 rounded-sm uppercase bg-[#10b981] hover:bg-[#059669] text-white transition-colors">Save</button>
+                    </div>
+                </div>
+            </div>
+        @endif
+
+        {{-- Quota Exceeded Warning Modal --}}
+        @if ($showQuotaModal)
+            <div class="fixed inset-0 z-50 flex items-center justify-center bg-[#010413]/85 backdrop-blur-xs p-4">
+                <div class="bg-[#161426] border border-[#f43f5e]/60 rounded-sm w-full max-w-md p-6 shadow-2xl font-sans">
+                    <div class="flex items-center gap-2 text-sm font-black uppercase tracking-wider text-[#f43f5e] mb-2">
+                        <span>⚠️</span>
+                        <span>{{ __t('Cloud Quota Exceeded') }}</span>
+                    </div>
+
+                    <p class="text-xs text-[#f8fafc] mb-3 leading-relaxed">
+                        {{ $quotaErrorMessage ?: __t('Your character balance is insufficient or depleted. Cloud translation has been automatically disabled.') }}
+                    </p>
+
+                    <p class="text-[11px] text-[#9da4af] mb-5 leading-relaxed">
+                        {{ __t('Cloud translation was automatically turned off to prevent further failed requests. Top up your balance and reconnect your API key when ready.') }}
+                    </p>
+
+                    <div class="flex justify-end gap-2 pt-3 border-t border-[#374151]">
+                        <button type="button" wire:click="$set('showQuotaModal', false)"
+                            class="text-[10px] font-bold px-3 py-2 rounded-sm uppercase bg-[#1c1a2e] hover:bg-[#374151] text-white transition-colors cursor-pointer">
+                            {{ __t('Close') }}
+                        </button>
+                        <button type="button" wire:click="$set('showQuotaModal', false); $set('showApiKeyModal', true);"
+                            class="text-[10px] font-bold px-4 py-2 rounded-sm uppercase bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shadow-sm cursor-pointer">
+                            {{ __t('API Key / Top Up') }}
+                        </button>
                     </div>
                 </div>
             </div>
