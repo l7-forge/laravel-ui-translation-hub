@@ -53,11 +53,16 @@ new class extends Component {
     public int $retryPasses = 0;
     public int $retryTotalCount = 0;
 
+    // Quota Exceeded Modal Properties
+    public bool $showQuotaModal = false;
+    public string $quotaErrorMessage = '';
+    public bool $lastRequestQuotaExceeded = false;
+//------------------------------------------------------------------------------------------------------------
     protected function getConfigPath()
     {
         return lang_path('hub-config.json');
     }
-
+//------------------------------------------------------------------------------------------------------------
     protected function ensureConfigExists()
     {
         $path = $this->getConfigPath();
@@ -79,14 +84,14 @@ new class extends Component {
             File::put($path, json_encode($defaultConfig, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
         }
     }
-
+//------------------------------------------------------------------------------------------------------------
     protected function readHubConfig()
     {
         $this->ensureConfigExists();
         $path = $this->getConfigPath();
         return json_decode(File::get($path), true) ?? [];
     }
-
+//------------------------------------------------------------------------------------------------------------
     protected function writeHubConfig(array $data)
     {
         $path = $this->getConfigPath();
@@ -96,7 +101,6 @@ new class extends Component {
         }
         File::put($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
     }
-
     //------------------------------------------------------------------------------------------------------------
 
     public function mount()
@@ -128,7 +132,6 @@ new class extends Component {
             $this->checkApiBalance();
         }
     }
-
     //------------------------------------------------------------------------------------------------------------
 
     public function checkApiBalance()
@@ -170,7 +173,6 @@ new class extends Component {
             $this->autoTranslateEnabled = true;
         }
     }
-
     //------------------------------------------------------------------------------------------------------------
 
     public function disableApi()
@@ -182,8 +184,25 @@ new class extends Component {
         $this->autoTranslateEnabled = false;
         $this->wordBalance = '---';
     }
+    //------------------------------------------------------------------------------------------------------------
 
+    public function toggleApi()
+    {
+        if ($this->autoTranslateEnabled) {
+            $this->disableApi();
+            return;
+        }
 
+        $configData = $this->readHubConfig();
+        $savedKey = $configData['api_key'] ?? '';
+
+        if (!empty($savedKey)) {
+            $this->apiKeyInput = $savedKey;
+            $this->verifyAndEnableApi();
+        } else {
+            $this->showApiKeyModal = true;
+        }
+    }
     //------------------------------------------------------------------------------------------------------------
 
     public function verifyAndEnableApi()
@@ -276,16 +295,12 @@ new class extends Component {
             $this->apiErrorMessage = 'Connection to API server failed: ' . $e->getMessage();
         }
     }
-
-    //------------------------------------------------------------------------------------------------------------
-
     //------------------------------------------------------------------------------------------------------------
 
     public function loadAvailableLocales()
     {
         $this->availableLocales = DB::table($this->languagesTable)->where('code', '!=', $this->baseLocaleIso)->pluck('name', 'code')->toArray();
     }
-
     //------------------------------------------------------------------------------------------------------------
 
     public function loadIso($iso)
@@ -293,7 +308,6 @@ new class extends Component {
         $path = lang_path("{$iso}.json");
         return File::exists($path) ? json_decode(File::get($path), true) : [];
     }
-
     //------------------------------------------------------------------------------------------------------------
 
     public function saveKey($key, $newText)
@@ -301,7 +315,6 @@ new class extends Component {
         $this->targetLanguageData[$key] = bin2hex($newText);
         $this->persistData();
     }
-
     //------------------------------------------------------------------------------------------------------------
 
     private function persistData()
@@ -318,111 +331,109 @@ new class extends Component {
         File::put($path, json_encode($this->targetLanguageData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
         Cache::forget("lang_json_{$this->targetLocaleIso}");
     }
-
     //------------------------------------------------------------------------------------------------------------
 
     public function requestTranslation($hexKey, $autoSave = true)
-        {
-            $this->lastRequestQuotaExceeded = false;
+    {
+        $this->lastRequestQuotaExceeded = false;
 
-            if (!$this->autoTranslateEnabled) {
+        if (!$this->autoTranslateEnabled) {
+            return;
+        }
+
+        $apiKey = session('UI_TRANSLATION_HUB_API_KEY');
+        if (empty($apiKey)) {
+            $configData = $this->readHubConfig();
+            $apiKey = $configData['api_key'] ?? '';
+        }
+
+        $hexKey = (string) $hexKey;
+
+        $payloadData = [
+            'api_key' => $apiKey,
+            'from_code' => $this->baseLocaleIso,
+            'to_code' => $this->targetLocaleIso,
+            'source_hex' => $hexKey,
+        ];
+
+        $startTime = microtime(true);
+        $fullEndpoint = rtrim($this->apiUrl, '/') . '/translate';
+
+        try {
+            $response = Http::timeout(30)->acceptJson()->asJson()->post($fullEndpoint, $payloadData);
+
+            $durationMs = (int) round((microtime(true) - $startTime) * 1000);
+            $httpCode = $response->status();
+            $responseData = $response->json() ?? ['raw' => $response->body()];
+
+            if ($this->apiDebugEnabled) {
+                $maskedPayload = $payloadData;
+                if (isset($maskedPayload['api_key'])) {
+                    $maskedPayload['api_key'] = substr($maskedPayload['api_key'], 0, 6) . '...***';
+                }
+
+                $this->lastApiInspect = [
+                    'timestamp' => now()->format('H:i:s.v'),
+                    'status' => $httpCode,
+                    'successful' => $response->successful(),
+                    'duration_ms' => $durationMs,
+                    'request' => [
+                        'method' => 'POST',
+                        'url' => $fullEndpoint,
+                        'payload' => $maskedPayload,
+                    ],
+                    'response' => $responseData,
+                    'error' => $response->failed() ? "HTTP Error {$httpCode}" : null,
+                ];
+            }
+
+            if ($httpCode === 402 || (($responseData['code'] ?? '') === 'QUOTA_EXCEEDED')) {
+                $this->lastRequestQuotaExceeded = true;
+                $this->quotaErrorMessage = (string) ($responseData['error'] ?? __t('Quota exceeded. Please top up your balance.'));
+                $this->wordBalance = 0;
+                $this->disableApi();
+                $this->showQuotaModal = true;
                 return;
             }
 
-            $apiKey = session('UI_TRANSLATION_HUB_API_KEY');
-            if (empty($apiKey)) {
-                $configData = $this->readHubConfig();
-                $apiKey = $configData['api_key'] ?? '';
+            if ($response->successful() && isset($responseData['translation_hex'])) {
+                $this->targetLanguageData[$hexKey] = (string) $responseData['translation_hex'];
+                $this->batchCharsTranslated += mb_strlen((string) hex2bin($hexKey));
+
+                if ($autoSave) {
+                    $this->persistData();
+                }
+
+                $remaining = $responseData['remaining_balance'] ?? null;
+                if ($remaining !== null) {
+                    $this->wordBalance = $remaining;
+
+                    if ($remaining <= 0) {
+                        $this->disableApi();
+                    }
+                }
             }
+        } catch (\Throwable $e) {
+            $durationMs = (int) round((microtime(true) - $startTime) * 1000);
 
-            $hexKey = (string) $hexKey;
-
-            $payloadData = [
-                'api_key' => $apiKey,
-                'from_code' => $this->baseLocaleIso,
-                'to_code' => $this->targetLocaleIso,
-                'source_hex' => $hexKey,
-            ];
-
-            $startTime = microtime(true);
-            $fullEndpoint = rtrim($this->apiUrl, '/') . '/translate';
-
-            try {
-                $response = Http::timeout(30)->acceptJson()->asJson()->post($fullEndpoint, $payloadData);
-
-                $durationMs = (int) round((microtime(true) - $startTime) * 1000);
-                $httpCode = $response->status();
-                $responseData = $response->json() ?? ['raw' => $response->body()];
-
-                if ($this->apiDebugEnabled) {
-                    $maskedPayload = $payloadData;
-                    if (isset($maskedPayload['api_key'])) {
-                        $maskedPayload['api_key'] = substr($maskedPayload['api_key'], 0, 6) . '...***';
-                    }
-
-                    $this->lastApiInspect = [
-                        'timestamp' => now()->format('H:i:s.v'),
-                        'status' => $httpCode,
-                        'successful' => $response->successful(),
-                        'duration_ms' => $durationMs,
-                        'request' => [
-                            'method' => 'POST',
-                            'url' => $fullEndpoint,
-                            'payload' => $maskedPayload,
-                        ],
-                        'response' => $responseData,
-                        'error' => $response->failed() ? "HTTP Error {$httpCode}" : null,
-                    ];
-                }
-
-                if ($httpCode === 402 || (($responseData['code'] ?? '') === 'QUOTA_EXCEEDED')) {
-                    $this->lastRequestQuotaExceeded = true;
-                    $this->quotaErrorMessage = (string) ($responseData['error'] ?? __t('Quota exceeded. Please top up your balance.'));
-                    $this->wordBalance = 0;
-                    $this->disableApi();
-                    $this->showQuotaModal = true;
-                    return;
-                }
-
-                if ($response->successful() && isset($responseData['translation_hex'])) {
-                    $this->targetLanguageData[$hexKey] = (string) $responseData['translation_hex'];
-                    $this->batchCharsTranslated += mb_strlen((string) hex2bin($hexKey));
-
-                    if ($autoSave) {
-                        $this->persistData();
-                    }
-
-                    $remaining = $responseData['remaining_balance'] ?? null;
-                    if ($remaining !== null) {
-                        $this->wordBalance = $remaining;
-
-                        if ($remaining <= 0) {
-                            $this->disableApi();
-                        }
-                    }
-                }
-            } catch (\Throwable $e) {
-                $durationMs = (int) round((microtime(true) - $startTime) * 1000);
-
-                if ($this->apiDebugEnabled) {
-                    $this->lastApiInspect = [
-                        'timestamp' => now()->format('H:i:s'),
-                        'status' => 0,
-                        'successful' => false,
-                        'duration_ms' => $durationMs,
-                        'request' => [
-                            'method' => 'POST',
-                            'url' => $fullEndpoint,
-                            'payload' => $payloadData,
-                        ],
-                        'response' => null,
-                        'error' => $e->getMessage(),
-                    ];
-                }
+            if ($this->apiDebugEnabled) {
+                $this->lastApiInspect = [
+                    'timestamp' => now()->format('H:i:s'),
+                    'status' => 0,
+                    'successful' => false,
+                    'duration_ms' => $durationMs,
+                    'request' => [
+                        'method' => 'POST',
+                        'url' => $fullEndpoint,
+                        'payload' => $payloadData,
+                    ],
+                    'response' => null,
+                    'error' => $e->getMessage(),
+                ];
             }
         }
-
-    //------------------------------------------------------------------------------------------------------------
+    }
+    
 
     public function updatedTargetLocaleIso()
     {
@@ -434,7 +445,6 @@ new class extends Component {
 
         $this->targetLanguageData = $this->loadIso($this->targetLocaleIso);
     }
-
     //------------------------------------------------------------------------------------------------------------
 
     public function startTranslateAll()
@@ -515,7 +525,6 @@ new class extends Component {
         $this->retryPasses = 0;
         $this->retryTotalCount = 0;
     }
-
     //------------------------------------------------------------------------------------------------------------
 
     public function addNewLanguage()
@@ -556,7 +565,6 @@ new class extends Component {
         $this->targetLocaleIso = $iso;
         $this->targetLanguageData = $this->loadIso($iso);
     }
-
     //------------------------------------------------------------------------------------------------------------
 
     public function deleteIndex($hexKey)
@@ -586,7 +594,6 @@ new class extends Component {
         $this->baseLanguageData = $this->loadIso($this->baseLocaleIso);
         $this->targetLanguageData = $this->targetLocaleIso ? $this->loadIso($this->targetLocaleIso) : [];
     }
-
     //------------------------------------------------------------------------------------------------------------
 };
 ?>
@@ -708,7 +715,7 @@ new class extends Component {
 
         {{-- Cloud / Autotranslate Banner --}}
         <div
-            class="flex justify-between items-center mb-8 p-3 rounded-sm border transition-colors duration-200 {{ $autoTranslateEnabled ? 'bg-[#10b981]/10 border-[#10b981]/40 text-[#10b981]' : 'bg-[#f59e0b]/10 border-[#f59e0b]/40 text-[#f59e0b]' }}">
+            class="flex justify-between items-center gap-4 mb-8 p-3 rounded-sm border transition-colors duration-200 {{ $autoTranslateEnabled ? 'bg-[#10b981]/10 border-[#10b981]/40 text-[#10b981]' : 'bg-[#f59e0b]/10 border-[#f59e0b]/40 text-[#f59e0b]' }}">
             <div class="flex items-center gap-3">
                 <label class="relative inline-flex items-center cursor-pointer select-none">
                     <input type="checkbox"
@@ -723,14 +730,20 @@ new class extends Component {
                 </label>
             </div>
 
-            <div>
+            <div class="flex items-center gap-3">
                 @if ($autoTranslateEnabled)
                     <span class="text-[10px] font-bold uppercase text-[#9da4af]">
                         Remaining chars: <span
                             class="text-[#10b981] font-mono font-black ml-1 text-lg">{{ $wordBalance }}</span>
                     </span>
                 @else
-                    <span class="text-[10px] italic text-[#f59e0b]">Connect your L7 Translation Hub Account to unlock Cloud Features.</span>
+                    <span class="text-[10px] italic text-[#f59e0b]">
+                        {{ __t('Connect your L7 Translation Hub Account to unlock Cloud Features.') }}
+                    </span>
+                    <a href="{{ rtrim($apiUrl, '/') }}/register" target="_blank" rel="noopener noreferrer"
+                        class="shrink-0 text-[10px] font-black uppercase px-2.5 py-1 rounded-sm bg-[#f59e0b] hover:bg-amber-400 text-[#080e20] transition-colors">
+                        {{ __t('Get free 15k chars on register') }} &rarr;
+                    </a>
                 @endif
             </div>
         </div>
